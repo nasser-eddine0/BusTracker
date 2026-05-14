@@ -1,0 +1,187 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+
+  --color-page: #f7f9fc;
+  --color-sidebar: #ffffff;
+  --color-card: #ffffff;
+  --color-card-soft: #fffaf0;
+  --color-card-muted: #fff3d6;
+  --color-accent: #f4c542;
+  --color-accent-strong: #e0b233;
+  --color-accent-light: #fff3c4;
+  --color-accent-soft: #fffbeb;
+  --color-main: #111827;
+  --color-muted: #374151;
+  --color-line: rgba(17, 24, 39, 0.09);
+  --color-success: #f4c542;
+  --color-danger: #fb7185;
+  --color-warning: #f4c542;
+
+  --shadow-panel: 0 16px 40px rgba(15, 23, 42, 0.08);
+  --shadow-soft: 0 12px 28px rgba(15, 23, 42, 0.06);
+  --shadow-accent: 0 12px 26px rgba(244, 197, 66, 0.24);
+}
+
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html {
+    @apply bg-page text-main;
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-page font-sans text-main antialiased;
+    background-image:
+      radial-gradient(circle at top left, rgba(244, 197, 66, 0.08), transparent 26%),
+      radial-gradient(circle at bottom right, rgba(255, 243, 196, 0.75), transparent 32%);
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .app-panel {
+    @apply rounded-[28px] border border-line bg-card shadow-[var(--shadow-panel)];
+  }
+
+  .app-panel-soft {
+    @apply rounded-[24px] border border-line bg-card-soft shadow-[var(--shadow-soft)];
+  }
+
+  .app-panel-muted {
+    @apply rounded-[24px] border border-line bg-card-muted shadow-[var(--shadow-soft)];
+  }
+
+  .app-pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-line bg-accent-soft px-3 py-1.5 text-xs font-semibold tracking-[0.08em] text-muted uppercase;
+  }
+
+  .app-input {
+    @apply h-12 w-full rounded-2xl border border-line bg-white px-4 text-sm text-main outline-none transition placeholder:text-slate-400 focus:border-accent/60 focus:ring-2 focus:ring-accent/15;
+  }
+
+  .app-textarea {
+    @apply w-full rounded-3xl border border-line bg-white px-4 py-3 text-sm text-main outline-none transition placeholder:text-slate-400 focus:border-accent/60 focus:ring-2 focus:ring-accent/15;
+  }
+
+  .app-grid-lines {
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+
+  .app-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-200;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+}
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #eef5ed;
+  font-family: inherit;
+}
+
+.leaflet-control-attribution,
+.leaflet-control-zoom {
+  display: none;
+}
+
+.bus-map-pin {
+  filter: drop-shadow(0 12px 18px rgba(88, 63, 0, 0.28));
+}
+
+.map-popup {
+  min-width: 160px;
+  color: #0f172a;
+}
+
+.page-transition {
+  width: 100%;
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping {
+  animation: ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes loading-bus-bar {
+  0% {
+    transform: translateX(-130%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.loading-bus-bar {
+  animation: loading-bus-bar 1.2s ease-in-out infinite;
+}
+
+/* RTL support */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] input,
+[dir="rtl"] select,
+[dir="rtl"] textarea {
+  text-align: right;
+}
+
+[dir="rtl"] .app-pill,
+[dir="rtl"] .app-input,
+[dir="rtl"] .app-textarea {
+  direction: rtl;
+}
+
+[dir="rtl"] .lg\:border-r {
+  border-right: none;
+  border-left: 1px solid var(--color-line);
+}
+
+[dir="rtl"] .lg\:left-0 {
+  left: auto;
+  right: 0;
+}
+
+[dir="rtl"] .space-x-2 > :not(:first-child),
+[dir="rtl"] .gap-2,
+[dir="rtl"] .gap-3,
+[dir="rtl"] .gap-4 {
+  direction: rtl;
+}

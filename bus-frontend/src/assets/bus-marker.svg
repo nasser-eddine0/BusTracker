@@ -1,0 +1,41 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pinMain" x1="22" y1="12" x2="98" y2="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD84D"/>
+      <stop offset="1" stop-color="#D5AE10"/>
+    </linearGradient>
+    <linearGradient id="pinHighlight" x1="90" y1="12" x2="112" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF0A1"/>
+      <stop offset="1" stop-color="#FFD84D"/>
+    </linearGradient>
+    <filter id="shadow" x="6" y="6" width="116" height="118" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#7E5E00" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <path d="M64 114L31.5 81.5C20 70.1 14 56.3 14 42.5C14 15.7 35.7 8 64 8C92.3 8 114 15.7 114 42.5C114 56.3 108 70.1 96.5 81.5L64 114Z" fill="url(#pinMain)" stroke="#4A3A00" stroke-width="1.5"/>
+    <path d="M84 10C100 11 112 17.5 112 42.5C112 55.3 106.5 67.9 95.8 78.6L64 110.5V89C86 65.5 96 48.7 96 31C96 23.1 92.1 16 84 10Z" fill="url(#pinHighlight)" opacity="0.85"/>
+    <circle cx="64" cy="46" r="35" fill="#FFFDF7" stroke="#4A3A00" stroke-width="1.5"/>
+  </g>
+
+  <g opacity="0.22" fill="#9D7B00">
+    <circle cx="32" cy="28" r="5"/>
+    <circle cx="50" cy="16" r="2.5"/>
+    <circle cx="89" cy="76" r="7"/>
+    <ellipse cx="56" cy="92" rx="10" ry="16" transform="rotate(35 56 92)"/>
+    <ellipse cx="100" cy="57" rx="5" ry="9" transform="rotate(12 100 57)"/>
+  </g>
+
+  <g transform="translate(42 26)">
+    <rect x="4" y="6" width="32" height="40" rx="5" fill="#D9B414" stroke="#5A4700" stroke-width="1.3"/>
+    <rect x="10.5" y="14" width="19" height="17" rx="1.8" fill="#FFFFFF" stroke="#5A4700" stroke-width="1"/>
+    <rect x="14" y="8" width="12" height="3.2" rx="1.4" fill="#FFFFFF" stroke="#5A4700" stroke-width="0.8"/>
+    <rect x="0" y="17" width="4" height="10" rx="1.2" fill="#E4BE17" stroke="#5A4700" stroke-width="0.8"/>
+    <rect x="36" y="17" width="4" height="10" rx="1.2" fill="#E4BE17" stroke="#5A4700" stroke-width="0.8"/>
+    <circle cx="13.5" cy="37.5" r="3.1" fill="#FFFFFF" stroke="#5A4700" stroke-width="0.9"/>
+    <circle cx="26.5" cy="37.5" r="3.1" fill="#FFFFFF" stroke="#5A4700" stroke-width="0.9"/>
+    <path d="M8 46H16V51C16 52.1 15.1 53 14 53H10C8.9 53 8 52.1 8 51V46Z" fill="#D9B414" stroke="#5A4700" stroke-width="1"/>
+    <path d="M24 46H32V51C32 52.1 31.1 53 30 53H26C24.9 53 24 52.1 24 51V46Z" fill="#D9B414" stroke="#5A4700" stroke-width="1"/>
+  </g>
+</svg>

@@ -1,0 +1,45 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
+    },
+    "buses": {
+      "$busId": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('driverUid').val() === auth.uid || $busId === root.child('students').child(root.child('users').child(auth.uid).child('studentId').val()).child('busId').val())",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        "location": {
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || data.parent().child('driverUid').val() === auth.uid || root.child('users').child(auth.uid).child('busId').val() === $busId)",
+          ".validate": "newData.hasChildren(['lat', 'lng', 'time', 'driverUid']) && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('time').isNumber() && newData.child('driverUid').val() === auth.uid"
+        }
+      }
+    },
+    "students": {
+      "$studentId": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('parentUid').val() === auth.uid || root.child('users').child(auth.uid).child('studentId').val() === $studentId || data.child('busId').val() === root.child('users').child(auth.uid).child('busId').val())",
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (root.child('users').child(auth.uid).child('role').val() === 'driver' && data.child('busId').val() === root.child('users').child(auth.uid).child('busId').val()))",
+        "status": {
+          ".validate": "newData.val() === 'waiting' || newData.val() === 'entered' || newData.val() === 'dropped' || newData.val() === 'absent'"
+        },
+        "updatedBy": {
+          ".validate": "newData.isString()"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber()"
+        }
+      }
+    },
+    "notifications": {
+      "parents": {
+        "$parentKey": {
+          ".read": "auth != null",
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'driver')"
+        }
+      }
+    }
+  }
+}

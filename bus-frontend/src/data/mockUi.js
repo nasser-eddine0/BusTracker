@@ -1,0 +1,216 @@
+export const mockBuses = {
+  bus04: {
+    name: "Bus 04",
+    routeName: "Boucle Avenue Centrale",
+    driverName: "Youssef El Amrani",
+    capacity: 30,
+    plateNumber: "12345-A-7",
+    schoolName: "Academie Atlas",
+    location: { lat: 33.595, lng: -7.618, time: Date.now() },
+  },
+  bus07: {
+    name: "Bus 07",
+    routeName: "Trajet Quartier Palmier",
+    driverName: "Salma Idrissi",
+    capacity: 24,
+    plateNumber: "55821-B-2",
+    schoolName: "Academie Atlas",
+    location: { lat: 33.582, lng: -7.642, time: Date.now() },
+  },
+  bus12: {
+    name: "Bus 12",
+    routeName: "Ramassage Route du Port",
+    driverName: "Karim Alaoui",
+    capacity: 28,
+    plateNumber: "77410-C-6",
+    schoolName: "Academie Atlas",
+    location: { lat: 33.606, lng: -7.655, time: Date.now() },
+  },
+};
+
+export const mockDrivers = {
+  driver1: {
+    name: "Youssef El Amrani",
+    email: "youssef@bustracker.app",
+    phone: "+212 6 11 24 80 10",
+    busId: "bus04",
+    licensePlate: "12345-A-7",
+    status: "active",
+  },
+  driver2: {
+    name: "Salma Idrissi",
+    email: "salma@bustracker.app",
+    phone: "+212 6 22 48 13 09",
+    busId: "bus07",
+    licensePlate: "55821-B-2",
+    status: "active",
+  },
+  driver3: {
+    name: "Karim Alaoui",
+    email: "karim@bustracker.app",
+    phone: "+212 6 33 75 19 44",
+    busId: "bus12",
+    licensePlate: "77410-C-6",
+    status: "active",
+  },
+};
+
+export const mockParents = {
+  parent1: {
+    name: "Nadia Benali",
+    email: "nadia@example.com",
+    phone: "+212 6 40 18 23 90",
+    childIds: ["student1"],
+    status: "active",
+  },
+  parent2: {
+    name: "Laila Saidi",
+    email: "laila@example.com",
+    phone: "+212 6 45 88 11 32",
+    childIds: ["student2"],
+    status: "active",
+  },
+  parent3: {
+    name: "Omar Chraibi",
+    email: "omar@example.com",
+    phone: "+212 6 55 02 78 14",
+    childIds: ["student3"],
+    status: "active",
+  },
+  parent4: {
+    name: "Samira Mouradi",
+    email: "samira@example.com",
+    phone: "+212 6 66 91 47 20",
+    childIds: ["student4"],
+    status: "active",
+  },
+  parent5: {
+    name: "Rania Naciri",
+    email: "rania@example.com",
+    phone: "+212 6 77 30 14 55",
+    childIds: ["student5"],
+    status: "active",
+  },
+};
+
+export const mockStudents = {
+  student1: {
+    name: "Salma Benali",
+    grade: "Niveau 4",
+    address: "Rue Atlas, Bloc C",
+    parentName: "Nadia Benali",
+    parentEmail: "nadia@example.com",
+    pickupTime: "07:30",
+    busId: "bus04",
+    status: "entered",
+    homeLocation: { lat: 33.591, lng: -7.614 },
+  },
+  student2: {
+    name: "Adam Saidi",
+    grade: "Niveau 2",
+    address: "Palm Street 18",
+    parentName: "Laila Saidi",
+    parentEmail: "laila@example.com",
+    pickupTime: "07:38",
+    busId: "bus04",
+    status: "waiting",
+    homeLocation: { lat: 33.594, lng: -7.621 },
+  },
+  student3: {
+    name: "Meryem Chraibi",
+    grade: "Niveau 5",
+    address: "Harbor Lane 5",
+    parentName: "Omar Chraibi",
+    parentEmail: "omar@example.com",
+    pickupTime: "07:42",
+    busId: "bus07",
+    status: "absent",
+    homeLocation: { lat: 33.584, lng: -7.639 },
+  },
+  student4: {
+    name: "Ilyas Mouradi",
+    grade: "Niveau 3",
+    address: "Ocean Residence",
+    parentName: "Samira Mouradi",
+    parentEmail: "samira@example.com",
+    pickupTime: "07:46",
+    busId: "bus07",
+    status: "entered",
+    homeLocation: { lat: 33.581, lng: -7.646 },
+  },
+  student5: {
+    name: "Hiba Naciri",
+    grade: "Niveau 1",
+    address: "Garden Tower",
+    parentName: "Rania Naciri",
+    parentEmail: "rania@example.com",
+    pickupTime: "07:52",
+    busId: "bus12",
+    status: "waiting",
+    homeLocation: { lat: 33.608, lng: -7.659 },
+  },
+  student6: {
+    name: "Nour Bennis",
+    grade: "Niveau 3",
+    address: "Quartier Oasis",
+    parentName: "Sara Bennis",
+    parentEmail: "sara@example.com",
+    pickupTime: "",
+    busId: "",
+    status: "waiting",
+    homeLocation: { lat: 33.597, lng: -7.631 },
+  },
+};
+
+export const adminAlerts = [
+  {
+    id: "alert-1",
+    title: "Bus 07 en retard a cause du trafic",
+    helper: "L'avenue principale est chargee. ETA prolongee de 6 minutes.",
+    tone: "warning",
+  },
+  {
+    id: "alert-2",
+    title: "Absence parent recue pour Meryem Chraibi",
+    helper: "La presence a ete synchronisee automatiquement.",
+    tone: "danger",
+  },
+  {
+    id: "alert-3",
+    title: "Le bus 04 est arrive pres de l'ecole",
+    helper: "Le chauffeur peut maintenant deposer les eleves.",
+    tone: "success",
+  },
+];
+
+export const importPreviewRows = [
+  {
+    regCode: "REG-240422-0001",
+    name: "Salma Benali",
+    grade: "Niveau 4",
+    address: "Rue Atlas, Bloc C",
+    parentName: "Nadia Benali",
+    parentEmail: "nadia@example.com",
+    parentPhone: "+212 6 40 18 23 90",
+  },
+  {
+    regCode: "REG-240422-0002",
+    name: "Adam Saidi",
+    grade: "Niveau 2",
+    address: "Palm Street 18",
+    parentName: "Laila Saidi",
+    parentEmail: "laila@example.com",
+    parentPhone: "+212 6 45 88 11 32",
+  },
+  {
+    regCode: "REG-240422-0003",
+    name: "Meryem Chraibi",
+    grade: "Niveau 5",
+    address: "Harbor Lane 5",
+    parentName: "Omar Chraibi",
+    parentEmail: "omar@example.com",
+    parentPhone: "+212 6 55 02 78 14",
+  },
+];
+
+export const reportSeries = [120, 188, 164, 260, 220, 310, 275, 340, 292, 368];

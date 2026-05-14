@@ -1,0 +1,10 @@
+{
+  "name": "bus-tracker-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix bus-frontend run dev",
+    "build": "npm --prefix bus-frontend run build",
+    "lint": "npm --prefix bus-frontend run lint",
+    "preview": "npm --prefix bus-frontend run preview"
+  }
+}
