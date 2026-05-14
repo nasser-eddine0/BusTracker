@@ -1,4 +1,6 @@
+# =========================
 # Logs
+# =========================
 logs
 *.log
 npm-debug.log*
@@ -7,26 +9,40 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# =========================
+# Node / React / Vite
+# =========================
 node_modules
+/node_modules
 dist
 dist-ssr
 .vite
+/public/build
+
+# Environment files
+.env
+.env.local
 *.local
 
-# Editor directories and files
+# =========================
+# Laravel
+# =========================
+/vendor
+/storage/*.key
+/bootstrap/cache/*
+/public/storage
+
+# =========================
+# IDE / OS files
+# =========================
 .vscode/*
 !.vscode/extensions.json
+
 .idea
 .DS_Store
+
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-/node_modules
-/vendor
-/public/build
-.env
-.env.local
-/storage/*.key
-bootstrap/cache/*
