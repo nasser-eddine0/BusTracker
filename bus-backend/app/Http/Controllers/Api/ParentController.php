@@ -48,6 +48,34 @@ class ParentController extends Controller
         ]);
     }
 
+    public function confirmLocation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'student_id' => ['required', 'integer', 'exists:students,id'],
+            'latitude'   => ['required', 'numeric', 'between:-90,90'],
+            'longitude'  => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $parent = $request->user();
+        $student = Student::query()
+            ->where('id', $validated['student_id'])
+            ->where('parent_id', $parent->id)
+            ->firstOrFail();
+
+        $student->update([
+            'latitude'           => $validated['latitude'],
+            'longitude'          => $validated['longitude'],
+            'home_lat'           => $validated['latitude'],
+            'home_lng'           => $validated['longitude'],
+            'location_conformee' => true,
+        ]);
+
+        return response()->json([
+            'message' => 'Location confirmed successfully.',
+            'student' => $this->serializeStudent($student->fresh(['bus', 'parent'])),
+        ]);
+    }
+
     public function declareAbsence(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
     {
         $validated = $request->validate([

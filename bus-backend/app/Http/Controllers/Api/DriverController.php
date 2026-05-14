@@ -23,6 +23,18 @@ class DriverController extends Controller
         $driver = $request->user();
         $bus = Bus::query()->with(['students.parent', 'activeTrip'])->where('driver_id', $driver->id)->first();
 
+        // Auto-complete stale trips from previous days so they don't auto-start on next login
+        if ($bus && $bus->activeTrip && optional($bus->activeTrip->trip_date)->toDateString() !== now()->toDateString()) {
+            $bus->activeTrip->update(['status' => 'completed', 'completed_at' => now()]);
+            $bus->update([
+                'trip_status' => 'idle',
+                'trip_started_at' => null,
+                'trip_completed_at' => now(),
+            ]);
+            $bus->refresh();
+            $bus->load(['students.parent', 'activeTrip']);
+        }
+
         return response()->json([
             'bus' => $bus ? $this->serializeBus($bus) : null,
             'students' => $bus

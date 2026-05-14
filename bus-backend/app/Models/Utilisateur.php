@@ -21,6 +21,7 @@ class Utilisateur extends Authenticatable
         'name',
         'email',
         'password',
+        'default_password',
         'role',
         'phone',
         'status',

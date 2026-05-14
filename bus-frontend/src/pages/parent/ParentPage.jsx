@@ -16,6 +16,7 @@ import AlertsTab from "./views/AlertsTab";
 import HomeTab from "./views/HomeTab";
 import MapTab from "./views/MapTab";
 import ProfileTab from "./views/ProfileTab";
+import LocationValidationModal from "./components/LocationValidationModal";
 import { getDistanceInKilometers, getStatusConfig } from "./utils";
 
 const MotionDiv = motion.div;
@@ -39,6 +40,7 @@ function ParentPage() {
   const [readyState, setReadyState] = useState("waiting");
   const [savingAbsence, setSavingAbsence] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
+  const [showLocationModal, setShowLocationModal] = useState(false);
 
   const refreshParentDashboard = useCallback(async () => {
     try {
@@ -56,6 +58,13 @@ function ParentPage() {
   useEffect(() => {
     refreshParentDashboard();
   }, [refreshParentDashboard]);
+
+  // Check if location validation is required after data loads
+  useEffect(() => {
+    if (student && student.locationConformee === false) {
+      setShowLocationModal(true);
+    }
+  }, [student]);
 
   useNotificationSocket({
     enabled: Boolean(user),
@@ -192,10 +201,14 @@ function ParentPage() {
       setStudent(response.data.student);
 
       if (bus?.activeTripId) {
-        await update(ref(db, `active_trips/${bus.activeTripId}/live_attendance/${studentWithLiveStatus.id}`), {
-          status: "absent",
-          updated_at: new Date().toISOString(),
-        });
+        try {
+          await update(ref(db, `active_trips/${bus.activeTripId}/live_attendance/${studentWithLiveStatus.id}`), {
+            status: "absent",
+            updated_at: new Date().toISOString(),
+          });
+        } catch {
+          // Absence is already persisted in the backend; ignore realtime mirror failures.
+        }
       }
 
       setReadyState("not-coming");
@@ -256,6 +269,15 @@ function ParentPage() {
 
   return (
     <div className="relative min-h-screen bg-page text-main">
+      {showLocationModal && student && (
+        <LocationValidationModal
+          student={student}
+          onLocationConfirmed={(updatedStudent) => {
+            setStudent(updatedStudent);
+            setShowLocationModal(false);
+          }}
+        />
+      )}
       <header className="sticky top-0 z-40 border-b border-line bg-white/80 backdrop-blur-xl">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">

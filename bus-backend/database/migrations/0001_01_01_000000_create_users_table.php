@@ -21,6 +21,8 @@ return new class extends Migration
         // الدور الافتراضي هو أب
         $table->string('role')->default('parent'); // admin, driver, parent
         $table->string('phone')->nullable();
+        $table->string('status')->default('active');
+        $table->string('cin')->nullable();
         
         $table->rememberToken();
         $table->timestamps();

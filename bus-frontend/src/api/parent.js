@@ -17,3 +17,11 @@ export async function fetchParentNotifications() {
 export async function linkParentChild(regCode) {
   return api.post("/parent/link-child", { reg_code: regCode });
 }
+
+export async function confirmStudentLocation(studentId, latitude, longitude) {
+  return api.post("/parent/confirm-location", {
+    student_id: Number(studentId),
+    latitude,
+    longitude,
+  });
+}

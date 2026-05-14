@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('bus_id')->constrained('buses')->cascadeOnDelete();
             $table->foreignId('driver_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('type')->default('pickup');
             $table->date('trip_date');
             $table->string('status')->default('in_progress');
             $table->timestamp('started_at')->nullable();

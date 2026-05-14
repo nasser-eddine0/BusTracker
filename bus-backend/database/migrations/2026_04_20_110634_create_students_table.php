@@ -15,7 +15,7 @@ return new class extends Migration
         $table->id();
         $table->string('full_name');
         $table->string('grade')->nullable();
-        $table->text('address');
+        $table->text('address')->nullable();
         
         // كود فريد كيعطيه الأدمين للأب (مثلاً: B102)
         $table->string('reg_code')->unique(); 
@@ -26,10 +26,18 @@ return new class extends Migration
               ->constrained('users')
               ->onDelete('set null');
               
-        // الطوبيس (ضروري التلميذ يكون عندو طوبيس من النهار الأول)
+        // الطوبيس (nullable حيت التلميذ يقدر يكون باقي ماتعطاهش طوبيس فاش كيتسجل من الإكسيل)
         $table->foreignId('bus_id')
+              ->nullable()
               ->constrained('buses')
               ->onDelete('cascade');
+              
+        $table->decimal('home_lat', 10, 7)->nullable();
+        $table->decimal('home_lng', 10, 7)->nullable();
+        $table->decimal('latitude', 10, 7)->nullable();
+        $table->decimal('longitude', 10, 7)->nullable();
+        $table->boolean('location_conformee')->default(false);
+        $table->string('status')->default('waiting');
               
         $table->timestamps();
     });

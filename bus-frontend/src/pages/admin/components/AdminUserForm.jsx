@@ -1,8 +1,11 @@
+import { useState } from "react";
+import { HiEye, HiEyeOff } from "react-icons/hi";
 import ActionButton from "../../../components/ui/ActionButton";
 import { useLanguage } from "../../../i18n";
 
-function AdminUserForm({ role, form, setForm, onSubmit, submitLabel, isSaving, busOptions = [] }) {
+function AdminUserForm({ role, form, setForm, onSubmit, submitLabel, isSaving, busOptions = [], defaultPassword }) {
   const { t } = useLanguage();
+  const [showPassword, setShowPassword] = useState(false);
   const roleLabel = role === "driver" ? t("driver") : role === "admin" ? t("admin") : t("parent");
 
   return (
@@ -50,11 +53,26 @@ function AdminUserForm({ role, form, setForm, onSubmit, submitLabel, isSaving, b
           </select>
         </div>
       ) : null}
+      {defaultPassword && (
+        <div className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
+          <span className="text-sm font-medium text-muted">{t("currentPassword")}:</span>
+          <span className="font-mono text-sm font-bold text-main">
+            {showPassword ? defaultPassword : "••••••••"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-white hover:text-main"
+          >
+            {showPassword ? <HiEyeOff className="text-lg" /> : <HiEye className="text-lg" />}
+          </button>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <input
           className="app-input"
           type="password"
-          placeholder={t("password")}
+          placeholder={defaultPassword ? t("newPassword") : t("password")}
           value={form.password}
           onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
         />

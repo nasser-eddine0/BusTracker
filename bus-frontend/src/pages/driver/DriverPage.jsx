@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { get, onValue, ref, remove, set, update } from "firebase/database";
 import toast from "react-hot-toast";
 import Sidebar from "../../components/ui/Sidebar";
-import { finalizeDriverTrip, fetchDriverDashboard, startDriverTrip } from "../../api/driver";
+import { finalizeDriverTrip, fetchDriverDashboard, startDriverTrip, updateDriverStudentStatus } from "../../api/driver";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
@@ -40,12 +40,13 @@ function DriverPage() {
   const refreshDriverDashboard = useCallback(async () => {
     try {
       const data = await fetchDriverDashboard();
+      const isInProgress = data.bus?.tripStatus === "in_progress" && Boolean(data.bus?.activeTripId);
       setBus(data.bus || null);
       setStudentsMap(data.students || {});
       setDriverEvents(data.notifications || []);
       setActiveTripId(data.bus?.activeTripId || null);
-      setTripStarted(["in_progress", "completed"].includes(data.bus?.tripStatus || "idle"));
-      setTripCompleted((data.bus?.tripStatus || "idle") === "completed");
+      setTripStarted(isInProgress);
+      setTripCompleted(false);
     } catch (error) {
       toast.error(error?.response?.data?.message || t("loadError"));
     }
@@ -217,7 +218,7 @@ function DriverPage() {
   };
 
   const handleStudentAction = async (status) => {
-    if (!currentStudent || !activeTripId || tripBusy) return;
+    if (!currentStudent || !bus?.id || tripBusy) return;
 
     setTripBusy(true);
     try {
@@ -225,6 +226,11 @@ function DriverPage() {
         status,
         updated_at: new Date().toISOString(),
       };
+
+      await updateDriverStudentStatus(currentStudent.id, {
+        busId: bus.id,
+        status,
+      });
 
       setActiveTripState((current) => ({
         ...(current || {}),
@@ -234,10 +240,25 @@ function DriverPage() {
         },
       }));
 
-      await update(ref(db, `active_trips/${activeTripId}/live_attendance/${currentStudent.id}`), updatedAttendance);
+      if (activeTripId) {
+        try {
+          await update(ref(db, `active_trips/${activeTripId}/live_attendance/${currentStudent.id}`), updatedAttendance);
+        } catch {
+          // Keep the backend as the source of truth when realtime writes are blocked.
+        }
+      }
+
+      setStudentsMap((current) => ({
+        ...current,
+        [String(currentStudent.id)]: {
+          ...current[String(currentStudent.id)],
+          status,
+        },
+      }));
+
       toast.success(status === "mounted" ? t("studentMounted") : t("studentAbsent"));
     } catch (error) {
-      toast.error(error?.message || t("saveError"));
+      toast.error(error?.response?.data?.message || error?.message || t("saveError"));
       await refreshDriverDashboard();
     } finally {
       setTripBusy(false);

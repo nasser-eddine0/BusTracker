@@ -23,10 +23,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/students', [AdminController::class, 'storeStudent']);
         Route::put('/students/{student}', [AdminController::class, 'updateStudent']);
+        Route::delete('/students/{student}', [AdminController::class, 'destroyStudent']);
+        Route::post('/students/bulk-delete', [AdminController::class, 'bulkDestroyStudents']);
         Route::post('/students/import-preview', [AdminController::class, 'importPreviewRows']);
+        Route::post('/students/parse-import-headers', [AdminController::class, 'parseImportHeaders']);
+        Route::post('/students/finalize-import', [AdminController::class, 'finalizeImport']);
+
+        Route::post('/users/bulk-delete', [AdminController::class, 'bulkDestroyUsers']);
 
         Route::post('/buses', [AdminController::class, 'storeBus']);
         Route::put('/buses/{bus}', [AdminController::class, 'updateBus']);
+        Route::delete('/buses/{bus}', [AdminController::class, 'destroyBus']);
+        Route::post('/buses/bulk-delete', [AdminController::class, 'bulkDestroyBuses']);
 
         Route::post('/assignments', [AdminController::class, 'assignStudents']);
     });
@@ -34,6 +42,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:driver')->prefix('driver')->group(function () {
         Route::get('/dashboard', [DriverController::class, 'dashboard']);
         Route::post('/trip/start', [TripController::class, 'start']);
+        Route::post('/students/{student}/status', [DriverController::class, 'updateStudentStatus']);
     });
 
     Route::middleware('role:driver')->post('/trips/{trip}/finalize', [TripController::class, 'finalize']);
@@ -42,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard', [ParentController::class, 'dashboard']);
         Route::post('/link-child', [ParentController::class, 'linkChild']);
         Route::post('/absence', [ParentController::class, 'declareAbsence']);
+        Route::post('/confirm-location', [ParentController::class, 'confirmLocation']);
         Route::get('/notifications', [ParentController::class, 'notifications']);
     });
 });

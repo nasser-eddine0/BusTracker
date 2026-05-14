@@ -7,25 +7,37 @@ function StudentForm({ form, setForm, onSubmit, isSaving, parents, buses }) {
   return (
     <form className="grid gap-4" onSubmit={onSubmit}>
       <div className="grid gap-4 md:grid-cols-2">
-        <input
-          className="app-input"
-          placeholder={t("studentName")}
-          value={form.name}
-          onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-        />
-        <input
-          className="app-input"
-          placeholder={t("grade")}
-          value={form.grade}
-          onChange={(event) => setForm((current) => ({ ...current, grade: event.target.value }))}
-        />
+        <label className="grid gap-2">
+          <span className="text-sm font-semibold text-main">{t("studentName")}</span>
+          <input
+            className="app-input"
+            name="name"
+            placeholder={t("studentName")}
+            value={form.name}
+            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+          />
+        </label>
+        <label className="grid gap-2">
+          <span className="text-sm font-semibold text-main">{t("grade")}</span>
+          <input
+            className="app-input"
+            name="grade"
+            placeholder={t("grade")}
+            value={form.grade ?? ""}
+            onChange={(event) => setForm((current) => ({ ...current, grade: event.target.value }))}
+          />
+        </label>
       </div>
-      <input
-        className="app-input"
-        placeholder={t("address")}
-        value={form.address}
-        onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
-      />
+      <label className="grid gap-2">
+        <span className="text-sm font-semibold text-main">{t("address")}</span>
+        <input
+          className="app-input"
+          name="address"
+          placeholder={t("address")}
+          value={form.address ?? ""}
+          onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
+        />
+      </label>
       <div className="grid gap-4 md:grid-cols-2">
         <input
           className="app-input"

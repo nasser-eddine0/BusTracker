@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('notifications', function (Blueprint $table) {
             $table->id();
             $table->foreignId('recipient_user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('parent_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('student_id')->nullable()->constrained('students')->nullOnDelete();
             $table->foreignId('bus_id')->nullable()->constrained('buses')->nullOnDelete();
             $table->foreignId('trip_id')->nullable()->constrained('trips')->nullOnDelete();
@@ -18,6 +19,7 @@ return new class extends Migration
             $table->string('type')->default('info');
             $table->string('title');
             $table->text('message');
+            $table->timestamp('date_envoi')->nullable();
             $table->json('payload')->nullable();
             $table->timestamp('read_at')->nullable();
             $table->timestamps();

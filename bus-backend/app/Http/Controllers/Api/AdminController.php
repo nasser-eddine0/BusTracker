@@ -16,6 +16,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\StudentsImport;
+use App\Imports\HeadersOnlyImport;
+use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
@@ -61,6 +65,7 @@ class AdminController extends Controller
                 'email' => strtolower($validated['email']),
                 'phone' => $validated['phone'] ?? null,
                 'password' => $validated['password'],
+                'default_password' => $validated['password'],
                 'status' => $validated['status'] ?? 'active',
                 'cin' => $validated['cin'] ?? null,
             ]);
@@ -101,6 +106,7 @@ class AdminController extends Controller
 
             if (!empty($validated['password'])) {
                 $user->password = $validated['password'];
+                $user->default_password = $validated['password'];
             }
 
             $user->save();
@@ -199,6 +205,24 @@ class AdminController extends Controller
         ]);
     }
 
+    public function destroyStudent(Student $student): JsonResponse
+    {
+        $student->delete();
+        return response()->json(['message' => 'Student deleted.']);
+    }
+
+    public function bulkDestroyStudents(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'studentIds' => ['required', 'array'],
+            'studentIds.*' => ['integer', 'exists:students,id']
+        ]);
+
+        Student::whereIn('id', $validated['studentIds'])->delete();
+
+        return response()->json(['message' => 'Students deleted.']);
+    }
+
     public function importPreviewRows(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -239,6 +263,54 @@ class AdminController extends Controller
         });
 
         return response()->json(['message' => 'Preview import saved.']);
+    }
+
+    public function parseImportHeaders(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'mimes:xlsx,csv,xls', 'max:10240'],
+        ]);
+
+        // Store the file temporarily
+        $path = $request->file('file')->store('temp', 'local');
+
+        // Extract headers using the lightweight HeadersOnlyImport
+        $import = new HeadersOnlyImport();
+        Excel::import($import, $path, 'local');
+
+        return response()->json([
+            'headers'             => $import->getHeaders(),
+            'temporary_file_path' => $path,
+        ]);
+    }
+
+    public function finalizeImport(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'temporary_file_path' => ['required', 'string'],
+            'mapping'             => ['required', 'array'],
+            'mapping.student_name' => ['required', 'string'],
+            'mapping.parent_cin'   => ['required', 'string'],
+            'mapping.*'            => ['nullable', 'string'],
+        ]);
+
+        $path = $validated['temporary_file_path'];
+
+        if (!Storage::disk('local')->exists($path)) {
+            return response()->json(['message' => 'Temporary file not found. Please re-upload.'], 422);
+        }
+
+        // Run the import with the user-defined mapping
+        Excel::import(
+            new StudentsImport($validated['mapping']),
+            $path,
+            'local'
+        );
+
+        // Clean up the temporary file
+        Storage::disk('local')->delete($validated['temporary_file_path']);
+
+        return response()->json(['message' => 'Import completed successfully.']);
     }
 
     public function storeBus(Request $request): JsonResponse
@@ -330,12 +402,63 @@ class AdminController extends Controller
         ]);
     }
 
+    public function destroyBus(Bus $bus): JsonResponse
+    {
+        DB::transaction(function () use ($bus) {
+            Student::query()->where('bus_id', $bus->id)->update(['bus_id' => null]);
+            $bus->update(['driver_id' => null]);
+            $bus->delete();
+        });
+
+        return response()->json(['message' => 'Bus deleted.']);
+    }
+
+    public function bulkDestroyUsers(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'userIds' => ['required', 'array'],
+            'userIds.*' => ['integer', 'exists:users,id'],
+        ]);
+
+        DB::transaction(function () use ($validated) {
+            $users = User::whereIn('id', $validated['userIds'])->get();
+
+            foreach ($users as $user) {
+                if ($user->role === 'driver') {
+                    Bus::query()->where('driver_id', $user->id)->update(['driver_id' => null]);
+                } elseif ($user->role === 'parent') {
+                    Student::query()->where('parent_id', $user->id)->update(['parent_id' => null]);
+                }
+            }
+
+            User::whereIn('id', $validated['userIds'])->delete();
+        });
+
+        return response()->json(['message' => 'Users deleted.']);
+    }
+
+    public function bulkDestroyBuses(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'busIds' => ['required', 'array'],
+            'busIds.*' => ['integer', 'exists:buses,id'],
+        ]);
+
+        DB::transaction(function () use ($validated) {
+            Student::query()->whereIn('bus_id', $validated['busIds'])->update(['bus_id' => null]);
+            Bus::whereIn('id', $validated['busIds'])->update(['driver_id' => null]);
+            Bus::whereIn('id', $validated['busIds'])->delete();
+        });
+
+        return response()->json(['message' => 'Buses deleted.']);
+    }
+
     private function validateStudent(Request $request, ?Student $student = null): array
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'grade' => ['required', 'string', 'max:255'],
-            'address' => ['required', 'string'],
+            'grade' => ['nullable', 'string', 'max:255'],
+            'address' => ['nullable', 'string'],
             'regCode' => [
                 'nullable',
                 'string',
@@ -382,6 +505,7 @@ class AdminController extends Controller
             'status' => $user->status,
             'cin' => $user->cin,
             'busId' => $user->drivenBus?->id ? (string) $user->drivenBus->id : '',
+            'defaultPassword' => $user->default_password,
         ];
     }
 
@@ -401,6 +525,7 @@ class AdminController extends Controller
             'busId' => $user->drivenBus?->id ? (string) $user->drivenBus->id : '',
             'licensePlate' => $user->drivenBus?->plate_number ?? '',
             'status' => $user->status,
+            'defaultPassword' => $user->default_password,
         ];
     }
 
@@ -414,6 +539,7 @@ class AdminController extends Controller
             'phone' => $user->phone ?? '',
             'childIds' => $user->children->map(fn (Student $student) => (string) $student->id)->values()->all(),
             'status' => $user->status,
+            'defaultPassword' => $user->default_password,
         ];
     }
 
@@ -424,7 +550,7 @@ class AdminController extends Controller
         return [
             'name' => $student->full_name,
             'grade' => $student->grade,
-            'address' => $student->address,
+            'address' => $this->normalizeStudentAddress($student->address),
             'regCode' => $student->reg_code,
             'parentId' => $student->parent_id ? (string) $student->parent_id : '',
             'parentName' => $student->parent?->name ?? '',
@@ -437,6 +563,15 @@ class AdminController extends Controller
                 ? ['lat' => (float) $student->latitude, 'lng' => (float) $student->longitude]
                 : null,
         ];
+    }
+
+    private function normalizeStudentAddress(?string $address): ?string
+    {
+        if ($address === null) {
+            return null;
+        }
+
+        return strcasecmp($address, 'unknown') === 0 ? null : $address;
     }
 
     private function serializeBus(Bus $bus): array

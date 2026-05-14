@@ -32,10 +32,23 @@ class TripController extends Controller
             ->firstOrFail();
 
         if ($bus->activeTrip) {
+            $bus->update([
+                'trip_status' => 'in_progress',
+                'trip_started_at' => $bus->activeTrip->started_at,
+                'trip_completed_at' => null,
+            ]);
+
             return response()->json([
-                'message' => 'An active trip already exists for this bus.',
+                'message' => 'Trip resumed.',
                 'tripId' => (string) $bus->activeTrip->id,
-            ], 409);
+                'trip' => [
+                    'id' => (string) $bus->activeTrip->id,
+                    'status' => $bus->activeTrip->status,
+                    'type' => $bus->activeTrip->type,
+                    'tripDate' => optional($bus->activeTrip->trip_date)->toDateString(),
+                    'startedAt' => optional($bus->activeTrip->started_at)->toIso8601String(),
+                ],
+            ]);
         }
 
         $trip = DB::transaction(function () use ($bus, $driver, $validated) {
