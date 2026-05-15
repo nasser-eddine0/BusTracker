@@ -1,5 +1,6 @@
 export function normalizeStudentStatus(status) {
-  if (status === "mounted" || status === "entered" || status === "on-board") return "mounted";
+  if (status === "ready") return "ready";
+  if (status === "mounted" || status === "entered" || status === "on-board" || status === "in_bus") return "mounted";
   if (status === "dropped" || status === "dropped-off") return "dropped";
   if (status === "absent") return "absent";
   return "waiting";

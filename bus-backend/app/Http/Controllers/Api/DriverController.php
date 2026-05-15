@@ -23,14 +23,30 @@ class DriverController extends Controller
         $driver = $request->user();
         $bus = Bus::query()->with(['students.parent', 'activeTrip'])->where('driver_id', $driver->id)->first();
 
-        // Auto-complete stale trips from previous days so they don't auto-start on next login
-        if ($bus && $bus->activeTrip && optional($bus->activeTrip->trip_date)->toDateString() !== now()->toDateString()) {
+        // Only clean up STALE trips from previous days — NOT today's active trip.
+        // This preserves the trip if the driver navigates within the app.
+        if ($bus && $bus->activeTrip && $bus->activeTrip->trip_date !== now()->toDateString()) {
             $bus->activeTrip->update(['status' => 'completed', 'completed_at' => now()]);
             $bus->update([
                 'trip_status' => 'idle',
                 'trip_started_at' => null,
                 'trip_completed_at' => now(),
             ]);
+            $bus->students()->whereIn('status', ['mounted', 'absent', 'in_bus', 'dropped'])->update(['status' => 'waiting']);
+            $bus->refresh();
+            $bus->load(['students.parent', 'activeTrip']);
+        }
+
+        // If no active trip today, ensure students start fresh
+        if ($bus && !$bus->activeTrip) {
+            if ($bus->trip_status !== 'idle') {
+                $bus->update([
+                    'trip_status' => 'idle',
+                    'trip_started_at' => null,
+                    'trip_completed_at' => now(),
+                ]);
+            }
+            $bus->students()->whereIn('status', ['mounted', 'in_bus', 'dropped'])->update(['status' => 'waiting']);
             $bus->refresh();
             $bus->load(['students.parent', 'activeTrip']);
         }
@@ -44,7 +60,7 @@ class DriverController extends Controller
                     ->all()
                 : [],
             'notifications' => Notification::query()
-                ->where('created_by_user_id', $driver->id)
+                ->where('recipient_user_id', $driver->id)
                 ->latest()
                 ->take(20)
                 ->get()
@@ -52,6 +68,8 @@ class DriverController extends Controller
                     'id' => (string) $notification->id,
                     'title' => $notification->title,
                     'helper' => $notification->message,
+                    'read' => $notification->read_at !== null,
+                    'createdAt' => optional($notification->date_envoi ?? $notification->created_at)->toIso8601String(),
                 ])
                 ->all(),
         ]);
@@ -105,7 +123,7 @@ class DriverController extends Controller
     public function updateStudentStatus(Request $request, Student $student, NotificationBroadcaster $broadcaster): JsonResponse
     {
         $validated = $request->validate([
-            'status' => ['required', Rule::in(['mounted', 'absent'])],
+            'status' => ['required', Rule::in(['mounted', 'absent', 'in_bus'])],
             'busId' => ['required', 'integer', 'exists:buses,id'],
         ]);
 
@@ -137,7 +155,8 @@ class DriverController extends Controller
             );
         }
 
-        $statusLabel = $validated['status'] === 'mounted' ? 'got on the bus' : 'is absent today';
+        $statusLabels = ['mounted' => 'got on the bus', 'in_bus' => 'got on the bus', 'absent' => 'is absent today'];
+        $statusLabel = $statusLabels[$validated['status']] ?? $validated['status'];
 
         $this->createParentNotification(
             $student->fresh('parent'),
@@ -154,7 +173,7 @@ class DriverController extends Controller
             $driver->id,
             $validated['status'],
             'Mise a jour eleve',
-            "{$student->full_name} a ete marque " . ($validated['status'] === 'mounted' ? 'present a bord.' : 'absent.'),
+            "{$student->full_name} a ete marque " . (in_array($validated['status'], ['mounted', 'in_bus']) ? 'present a bord.' : 'absent.'),
             [
                 'studentName' => $student->full_name,
                 'busName' => $bus->bus_name,
@@ -296,6 +315,37 @@ class DriverController extends Controller
 
             $broadcaster->broadcast($notification);
         }
+    }
+
+    public function notifications(Request $request): JsonResponse
+    {
+        $driver = $request->user();
+
+        return response()->json([
+            'notifications' => Notification::query()
+                ->where('recipient_user_id', $driver->id)
+                ->latest()
+                ->take(20)
+                ->get()
+                ->map(fn (Notification $notification) => [
+                    'id' => (string) $notification->id,
+                    'title' => $notification->title,
+                    'helper' => $notification->message,
+                    'read' => $notification->read_at !== null,
+                    'createdAt' => optional($notification->date_envoi ?? $notification->created_at)->toIso8601String(),
+                ])
+                ->all(),
+        ]);
+    }
+
+    public function markNotificationsRead(Request $request): JsonResponse
+    {
+        Notification::query()
+            ->where('recipient_user_id', $request->user()->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return response()->json(['message' => 'Notifications marked as read.']);
     }
 
     private function serializeBus(Bus $bus): array

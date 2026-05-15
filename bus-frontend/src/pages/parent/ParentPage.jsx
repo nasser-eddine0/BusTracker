@@ -5,10 +5,11 @@ import { HiBell, HiTruck } from "react-icons/hi";
 import { HiMapPin, HiUser } from "react-icons/hi2";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { declareParentAbsence, fetchParentDashboard } from "../../api/parent";
+import { declareParentAbsence, declareParentReady, fetchParentDashboard, markParentNotificationsRead } from "../../api/parent";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase";
 import useFirebaseActiveTrip from "../../hooks/useFirebaseActiveTrip";
+import useFirebaseTripForBus from "../../hooks/useFirebaseTripForBus";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
 import useFirebaseBusLocations from "../../hooks/useFirebaseBusLocations";
 import { useLanguage } from "../../i18n";
@@ -74,15 +75,24 @@ function ParentPage() {
     }, []),
   });
 
-  const activeTrip = useFirebaseActiveTrip(bus?.activeTripId);
+  // Detect active trip from Firebase in real-time (no refresh needed)
+  const liveTripId = useFirebaseTripForBus(bus?.id);
+  const effectiveTripId = liveTripId || bus?.activeTripId || null;
+  const activeTrip = useFirebaseActiveTrip(effectiveTripId);
 
   const busWithLiveLocation = useMemo(() => {
     if (!bus) return null;
+
+    // Only show bus location when there is an active trip
+    const hasActiveTrip = Boolean(effectiveTripId);
+    const liveLocation = activeTrip?.live_location || busLocations[String(bus.id)] || null;
+
     return {
       ...bus,
-      location: activeTrip?.live_location || busLocations[String(bus.id)] || bus.location || null,
+      activeTripId: effectiveTripId,
+      location: hasActiveTrip ? (liveLocation || bus.location || null) : null,
     };
-  }, [activeTrip?.live_location, bus, busLocations]);
+  }, [activeTrip?.live_location, bus, busLocations, effectiveTripId]);
 
   const studentWithLiveStatus = useMemo(() => {
     if (!student) return null;
@@ -100,7 +110,7 @@ function ParentPage() {
     [busWithLiveLocation, homeLocation]
   );
   const unreadCount = notifications.filter((item) => item.read === false).length;
-  const statusConfig = useMemo(() => getStatusConfig(studentWithLiveStatus?.status, t), [studentWithLiveStatus?.status, t]);
+  const statusConfig = useMemo(() => getStatusConfig(studentWithLiveStatus?.status, t, Boolean(effectiveTripId)), [studentWithLiveStatus?.status, t, effectiveTripId]);
 
   const notificationFeed = useMemo(() => {
     if (!notifications.length) {
@@ -112,8 +122,17 @@ function ParentPage() {
       title: item.message || item.title || t("tripUpdate"),
       helper: item.studentName || t("parentNotification"),
       tone: item.read ? "info" : "success",
+      read: item.read,
+      createdAt: item.createdAt,
     }));
   }, [notifications, t]);
+
+  const handleMarkParentRead = useCallback(async () => {
+    try {
+      await markParentNotificationsRead();
+      setNotifications((current) => current.map((n) => ({ ...n, read: true })));
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     if (!bus?.activeTripId) {
@@ -186,9 +205,24 @@ function ParentPage() {
     }
   }, [bus?.activeTripId, busWithLiveLocation?.location, distanceToBus, homeLocation, studentWithLiveStatus, t]);
 
-  const handleReady = () => {
+  const handleReady = async () => {
+    if (!studentWithLiveStatus?.id) return;
     setReadyState("ready");
     toast.success(t("childReady"));
+
+    // Update Firebase so the driver sees "ready" status in real-time
+    if (effectiveTripId) {
+      try {
+        await update(ref(db, `active_trips/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
+          status: "ready",
+          updated_at: new Date().toISOString(),
+        });
+      } catch { /* best-effort */ }
+    }
+
+    try {
+      await declareParentReady(studentWithLiveStatus.id);
+    } catch { /* notification is best-effort */ }
   };
 
   const handleNotComing = async () => {
@@ -200,9 +234,10 @@ function ParentPage() {
       const response = await declareParentAbsence(studentWithLiveStatus.id);
       setStudent(response.data.student);
 
-      if (bus?.activeTripId) {
+      // Update Firebase so the driver sees "absent" status in real-time
+      if (effectiveTripId) {
         try {
-          await update(ref(db, `active_trips/${bus.activeTripId}/live_attendance/${studentWithLiveStatus.id}`), {
+          await update(ref(db, `active_trips/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
             status: "absent",
             updated_at: new Date().toISOString(),
           });
@@ -241,7 +276,7 @@ function ParentPage() {
           />
         );
       case "alerts":
-        return <AlertsTab t={t} unreadCount={unreadCount} notificationFeed={notificationFeed} />;
+        return <AlertsTab t={t} unreadCount={unreadCount} notificationFeed={notificationFeed} onMarkRead={handleMarkParentRead} />;
       case "profile":
         return <ProfileTab t={t} user={user} student={studentWithLiveStatus} busWithLiveLocation={busWithLiveLocation} statusConfig={statusConfig} handleLogout={handleLogout} />;
       default:

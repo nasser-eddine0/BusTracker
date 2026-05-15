@@ -9,6 +9,10 @@ export async function declareParentAbsence(studentId) {
   return api.post("/parent/absence", { studentId: Number(studentId) });
 }
 
+export async function declareParentReady(studentId) {
+  return api.post("/parent/ready", { studentId: Number(studentId) });
+}
+
 export async function fetchParentNotifications() {
   const response = await api.get("/parent/notifications");
   return response.data.notifications || [];
@@ -24,4 +28,9 @@ export async function confirmStudentLocation(studentId, latitude, longitude) {
     latitude,
     longitude,
   });
+}
+
+export async function markParentNotificationsRead() {
+  const response = await api.post("/parent/notifications/mark-read");
+  return response.data;
 }

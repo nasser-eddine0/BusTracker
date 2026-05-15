@@ -5,6 +5,11 @@ export async function fetchDriverDashboard() {
   return response.data;
 }
 
+export async function fetchDriverNotifications() {
+  const response = await api.get("/driver/notifications");
+  return response.data.notifications || [];
+}
+
 export async function startDriverTrip(busId, payload = {}) {
   const response = await api.post("/driver/trip/start", {
     busId: Number(busId),
@@ -25,5 +30,30 @@ export async function updateDriverStudentStatus(studentId, payload) {
     status: payload.status,
   });
 
+  return response.data;
+}
+
+export async function pingDriverLocation(tripId, latitude, longitude, currentTargetId) {
+  const response = await api.post("/driver/trip/ping-location", {
+    tripId: Number(tripId),
+    latitude,
+    longitude,
+    currentTargetId: currentTargetId ? Number(currentTargetId) : null,
+  });
+
+  return response.data;
+}
+
+export async function nudgeParent(tripId, studentId) {
+  const response = await api.post("/driver/trip/nudge-parent", {
+    tripId: Number(tripId),
+    studentId: Number(studentId),
+  });
+
+  return response.data;
+}
+
+export async function markDriverNotificationsRead() {
+  const response = await api.post("/driver/notifications/mark-read");
   return response.data;
 }

@@ -7,11 +7,13 @@ use App\Models\Admin;
 use App\Models\Bus;
 use App\Models\Chauffeur;
 use App\Models\Notification;
+use App\Models\Presence;
 use App\Models\Student;
 use App\Models\Trip;
 use App\Services\NotificationBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -31,27 +33,15 @@ class TripController extends Controller
             ->where('driver_id', $driver->id)
             ->firstOrFail();
 
+        // Force-complete any stale active trip so a fresh one can be created
         if ($bus->activeTrip) {
-            $bus->update([
-                'trip_status' => 'in_progress',
-                'trip_started_at' => $bus->activeTrip->started_at,
-                'trip_completed_at' => null,
-            ]);
-
-            return response()->json([
-                'message' => 'Trip resumed.',
-                'tripId' => (string) $bus->activeTrip->id,
-                'trip' => [
-                    'id' => (string) $bus->activeTrip->id,
-                    'status' => $bus->activeTrip->status,
-                    'type' => $bus->activeTrip->type,
-                    'tripDate' => optional($bus->activeTrip->trip_date)->toDateString(),
-                    'startedAt' => optional($bus->activeTrip->started_at)->toIso8601String(),
-                ],
-            ]);
+            $bus->activeTrip->update(['status' => 'completed', 'completed_at' => now()]);
         }
 
         $trip = DB::transaction(function () use ($bus, $driver, $validated) {
+            // Reset all students to waiting before starting a new trip
+            $bus->students()->update(['status' => 'waiting']);
+
             $trip = Chauffeur::query()->findOrFail($driver->id)->startTrip(
                 $bus,
                 $validated['type'] ?? 'pickup'
@@ -62,6 +52,20 @@ class TripController extends Controller
                 'trip_started_at' => now(),
                 'trip_completed_at' => null,
             ]);
+
+            // Bulk-insert presence records for all students assigned to this bus
+            $presenceRows = $bus->students->map(fn (Student $student) => [
+                'student_id' => $student->id,
+                'trip_id' => $trip->id,
+                'status' => 'waiting',
+                'recorded_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ])->all();
+
+            if (count($presenceRows)) {
+                DB::table('presences')->insert($presenceRows);
+            }
 
             return $trip;
         });
@@ -128,7 +132,9 @@ class TripController extends Controller
                 'student_id' => (int) $entry['student_id'],
                 'trip_id' => (int) $trip->id,
                 'status' => $entry['status'],
-                'recorded_at' => $entry['recorded_at'] ?? now(),
+                'recorded_at' => !empty($entry['recorded_at'])
+                    ? \Illuminate\Support\Carbon::parse($entry['recorded_at'])
+                    : now(),
             ])
             ->values();
 
@@ -215,6 +221,151 @@ class TripController extends Controller
             'tripId' => (string) $trip->id,
             'presencesCount' => $attendanceRows->count(),
         ]);
+    }
+
+    public function pingLocation(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
+    {
+        $validated = $request->validate([
+            'tripId' => ['required', 'integer', 'exists:trips,id'],
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+            'currentTargetId' => ['nullable', 'integer', 'exists:students,id'],
+        ]);
+
+        $driver = $request->user();
+        $trip = Trip::query()
+            ->with('bus')
+            ->where('id', $validated['tripId'])
+            ->where('driver_id', $driver->id)
+            ->where('status', 'in_progress')
+            ->firstOrFail();
+
+        // Update bus live coordinates
+        $trip->bus->update([
+            'latitude_actuelle' => $validated['latitude'],
+            'longitude_actuelle' => $validated['longitude'],
+        ]);
+
+        $alerts = [];
+
+        // Geofencing: check distance to current target student
+        if ($validated['currentTargetId']) {
+            $student = Student::query()
+                ->with('parent')
+                ->where('id', $validated['currentTargetId'])
+                ->where('bus_id', $trip->bus_id)
+                ->first();
+
+            if ($student && $student->latitude !== null && $student->longitude !== null) {
+                $distance = $this->haversineMeters(
+                    $validated['latitude'],
+                    $validated['longitude'],
+                    $student->latitude,
+                    $student->longitude
+                );
+
+                // Trigger 1: <= 2000m (≈5 min away) — "bus is near"
+                $nearCacheKey = "trip_{$trip->id}_student_{$student->id}_near";
+                if ($distance <= 2000 && !Cache::has($nearCacheKey) && $student->parent_id) {
+                    $this->createParentNotification(
+                        $student,
+                        $trip->bus,
+                        $trip,
+                        (int) $driver->id,
+                        'bus_near',
+                        'Bus approaching',
+                        "Le bus est proche, environ 5 minutes. Préparez {$student->full_name}.",
+                        $broadcaster
+                    );
+                    Cache::put($nearCacheKey, true, now()->addHours(2));
+                    $alerts[] = 'near';
+                }
+
+                // Trigger 2: <= 50m — "bus is at the door"
+                $arrivedCacheKey = "trip_{$trip->id}_student_{$student->id}_arrived";
+                if ($distance <= 50 && !Cache::has($arrivedCacheKey) && $student->parent_id) {
+                    $this->createParentNotification(
+                        $student,
+                        $trip->bus,
+                        $trip,
+                        (int) $driver->id,
+                        'bus_arrived',
+                        'Bus arrived',
+                        "Le bus est devant la porte pour {$student->full_name}.",
+                        $broadcaster
+                    );
+                    Cache::put($arrivedCacheKey, true, now()->addHours(2));
+                    $alerts[] = 'arrived';
+                }
+
+                return response()->json([
+                    'distance' => round($distance),
+                    'alerts' => $alerts,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'distance' => null,
+            'alerts' => $alerts,
+        ]);
+    }
+
+    public function nudgeParent(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
+    {
+        $validated = $request->validate([
+            'tripId' => ['required', 'integer', 'exists:trips,id'],
+            'studentId' => ['required', 'integer', 'exists:students,id'],
+        ]);
+
+        $driver = $request->user();
+        $trip = Trip::query()
+            ->with('bus')
+            ->where('id', $validated['tripId'])
+            ->where('driver_id', $driver->id)
+            ->where('status', 'in_progress')
+            ->firstOrFail();
+
+        $student = Student::query()
+            ->with('parent')
+            ->where('id', $validated['studentId'])
+            ->where('bus_id', $trip->bus_id)
+            ->firstOrFail();
+
+        if (!$student->parent_id) {
+            return response()->json(['message' => 'Student has no linked parent.'], 422);
+        }
+
+        $this->createParentNotification(
+            $student,
+            $trip->bus,
+            $trip,
+            (int) $driver->id,
+            'nudge',
+            'المرجو الإسراع',
+            "الحافلة في انتظار {$student->full_name}، المرجو الإسراع!",
+            $broadcaster
+        );
+
+        return response()->json(['message' => 'Nudge sent.']);
+    }
+
+    /**
+     * Haversine formula — returns distance in meters between two GPS coordinates.
+     */
+    private function haversineMeters(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadius = 6371000; // meters
+
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+
+        $a = sin($dLat / 2) ** 2
+            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c;
     }
 
     private function createParentNotification(

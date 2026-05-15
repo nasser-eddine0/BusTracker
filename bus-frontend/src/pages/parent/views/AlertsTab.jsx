@@ -1,6 +1,14 @@
+import { useEffect } from "react";
 import NotificationItem from "../../../components/ui/NotificationItem";
 
-function AlertsTab({ t, unreadCount, notificationFeed }) {
+function AlertsTab({ t, unreadCount, notificationFeed, onMarkRead }) {
+  // Mark all as read when this tab opens
+  useEffect(() => {
+    if (onMarkRead && unreadCount > 0) {
+      onMarkRead();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-4">
       <div className="rounded-[24px] border border-line bg-white p-4 shadow-sm">

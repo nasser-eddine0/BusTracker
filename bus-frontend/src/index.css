@@ -111,6 +111,13 @@
   display: none;
 }
 
+/* Hide leaflet-routing-machine itinerary panel & controls */
+.leaflet-routing-container,
+.leaflet-routing-alt,
+.leaflet-routing-alternatives-container {
+  display: none !important;
+}
+
 .bus-map-pin {
   filter: drop-shadow(0 12px 18px rgba(88, 63, 0, 0.28));
 }

@@ -31,9 +31,9 @@ class Chauffeur extends Utilisateur
         return Notification::create($attributes);
     }
 
-    public function startTrip(Bus $bus, string $type = 'pickup'): Trajet
+    public function startTrip(Bus $bus, string $type = 'pickup'): Trip
     {
-        return Trajet::create([
+        return Trip::create([
             'bus_id' => $bus->id,
             'driver_id' => $this->id,
             'type' => $type,

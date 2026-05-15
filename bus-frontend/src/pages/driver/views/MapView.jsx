@@ -1,5 +1,4 @@
 import DriverMapPanel from "../components/DriverMapPanel";
-import { buildStudentRoute } from "../utils";
 
 function MapView({ t, tripStarted, statusText, currentStudent, routeStudents, busLive }) {
   const selectedStudent = currentStudent || routeStudents[0] || null;
@@ -9,7 +8,6 @@ function MapView({ t, tripStarted, statusText, currentStudent, routeStudents, bu
       <DriverMapPanel
         busLocation={busLive?.location}
         pickupLocation={selectedStudent?.homeLocation || null}
-        routeLine={selectedStudent ? buildStudentRoute(busLive?.location, selectedStudent.homeLocation) : []}
       />
       <div className="rounded-[16px] bg-accent px-4 py-3 text-center text-sm font-extrabold text-slate-900 shadow-[var(--shadow-soft)]">
         {tripStarted ? statusText : t("notStarted")}

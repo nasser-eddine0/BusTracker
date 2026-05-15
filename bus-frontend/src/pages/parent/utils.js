@@ -19,7 +19,7 @@ export function getDistanceInKilometers(firstPoint, secondPoint) {
   return earthRadius * c;
 }
 
-export function getStatusConfig(studentStatus, t) {
+export function getStatusConfig(studentStatus, t, hasActiveTrip = false) {
   if (studentStatus === "entered" || studentStatus === "mounted") {
     return { text: t("inBus"), color: "bg-emerald-500", textColor: "text-white", icon: HiTruck, pulse: true };
   }
@@ -28,6 +28,17 @@ export function getStatusConfig(studentStatus, t) {
   }
   if (studentStatus === "absent") {
     return { text: t("absentToday"), color: "bg-rose-500", textColor: "text-white", icon: HiXCircle, pulse: false };
+  }
+  if (studentStatus === "waiting") {
+    if (hasActiveTrip) {
+      return { text: t("busApproaching"), color: "bg-sky-500", textColor: "text-white", icon: HiSignal, pulse: true };
+    }
+    return { text: t("waitingForBus") || t("waiting"), color: "bg-slate-400", textColor: "text-white", icon: HiSignal, pulse: false };
+  }
+
+  // null/undefined = page is still loading, show neutral placeholder
+  if (!studentStatus) {
+    return { text: "...", color: "bg-slate-300", textColor: "text-white", icon: HiSignal, pulse: false };
   }
 
   return { text: t("busApproaching"), color: "bg-sky-500", textColor: "text-white", icon: HiSignal, pulse: true };

@@ -42,7 +42,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:driver')->prefix('driver')->group(function () {
         Route::get('/dashboard', [DriverController::class, 'dashboard']);
         Route::post('/trip/start', [TripController::class, 'start']);
+        Route::post('/trip/ping-location', [TripController::class, 'pingLocation']);
+        Route::post('/trip/nudge-parent', [TripController::class, 'nudgeParent']);
         Route::post('/students/{student}/status', [DriverController::class, 'updateStudentStatus']);
+        Route::get('/notifications', [DriverController::class, 'notifications']);
+        Route::post('/notifications/mark-read', [DriverController::class, 'markNotificationsRead']);
     });
 
     Route::middleware('role:driver')->post('/trips/{trip}/finalize', [TripController::class, 'finalize']);
@@ -51,7 +55,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard', [ParentController::class, 'dashboard']);
         Route::post('/link-child', [ParentController::class, 'linkChild']);
         Route::post('/absence', [ParentController::class, 'declareAbsence']);
+        Route::post('/ready', [ParentController::class, 'declareReady']);
         Route::post('/confirm-location', [ParentController::class, 'confirmLocation']);
         Route::get('/notifications', [ParentController::class, 'notifications']);
+        Route::post('/notifications/mark-read', [ParentController::class, 'markNotificationsRead']);
     });
 });

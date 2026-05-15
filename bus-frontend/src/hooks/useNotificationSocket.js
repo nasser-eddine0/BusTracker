@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 function getSocketUrl() {
-  return import.meta.env.VITE_NOTIFICATIONS_WS_URL || "ws://127.0.0.1:8081";
+  return import.meta.env.VITE_NOTIFICATIONS_WS_URL || `ws://${window.location.hostname}:8081`;
 }
 
 export default function useNotificationSocket({ enabled = true, onNotification }) {

@@ -76,6 +76,42 @@ class ParentController extends Controller
         ]);
     }
 
+    public function declareReady(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
+    {
+        $validated = $request->validate([
+            'studentId' => ['required', 'integer', 'exists:students,id'],
+        ]);
+
+        $parent = $request->user();
+        $student = Student::query()
+            ->with('bus.driver')
+            ->where('id', $validated['studentId'])
+            ->where('parent_id', $parent->id)
+            ->firstOrFail();
+
+        if ($student->bus?->driver_id) {
+            $notification = Notification::create([
+                'recipient_user_id' => $student->bus->driver_id,
+                'parent_id' => $parent->id,
+                'student_id' => $student->id,
+                'bus_id' => $student->bus_id,
+                'created_by_user_id' => $parent->id,
+                'type' => 'child_ready',
+                'title' => 'Child ready',
+                'message' => "{$student->full_name} is ready at the pickup point.",
+                'date_envoi' => now(),
+                'payload' => [
+                    'studentName' => $student->full_name,
+                    'parentName' => $parent->name,
+                ],
+            ]);
+
+            $broadcaster->broadcast($notification);
+        }
+
+        return response()->json(['message' => 'Ready status sent.']);
+    }
+
     public function declareAbsence(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
     {
         $validated = $request->validate([
@@ -167,6 +203,16 @@ class ParentController extends Controller
         return response()->json([
             'notifications' => $this->serializeNotifications($request->user()->id),
         ]);
+    }
+
+    public function markNotificationsRead(Request $request): JsonResponse
+    {
+        Notification::query()
+            ->where('recipient_user_id', $request->user()->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return response()->json(['message' => 'Notifications marked as read.']);
     }
 
     private function serializeNotifications(int $userId): array
