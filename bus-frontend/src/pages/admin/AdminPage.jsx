@@ -11,11 +11,11 @@ import useFirebaseBusLocations from "../../hooks/useFirebaseBusLocations";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
 import { useLanguage } from "../../i18n";
 import { buildAdminNavigation } from "./utils";
+import AdminDashboard from "./pages/AdminDashboard";
 import AssignmentsPage from "./pages/AssignmentsPage";
 import DashboardPage from "./pages/DashboardPage";
 import FleetPage from "./pages/FleetPage";
 import ImportPage from "./pages/ImportPage";
-import ReportsPage from "./pages/ReportsPage";
 import UsersPage from "./pages/UsersPage";
 
 const MotionDiv = motion.div;
@@ -126,7 +126,7 @@ function AdminPage() {
             <Route path="import" element={<ImportPage students={students} parents={parents} buses={buses} onRefresh={refreshAdminData} />} />
             <Route path="fleet" element={<FleetPage buses={buses} drivers={drivers} students={students} onRefresh={refreshAdminData} />} />
             <Route path="assignments" element={<AssignmentsPage buses={buses} students={students} onRefresh={refreshAdminData} />} />
-            <Route path="reports" element={<ReportsPage buses={buses} students={students} />} />
+            <Route path="reports" element={<AdminDashboard buses={buses} students={students} drivers={drivers} parents={parents} notifications={adminNotifications} summary={bootstrap.summary || {}} activeTrips={activeTrips} initialTab="archive" />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Routes>
         </MotionDiv>

@@ -22,6 +22,7 @@ class DriverController extends Controller
     {
         $driver = $request->user();
         $bus = Bus::query()->with(['students.parent', 'activeTrip'])->where('driver_id', $driver->id)->first();
+        $latestTrip = $bus?->trips()->latest('trip_date')->latest('id')->first();
 
         // Only clean up STALE trips from previous days — NOT today's active trip.
         // This preserves the trip if the driver navigates within the app.
@@ -37,7 +38,8 @@ class DriverController extends Controller
             $bus->load(['students.parent', 'activeTrip']);
         }
 
-        // If no active trip today, ensure students start fresh
+        // If there is no active trip and the last trip is from a previous day, reset old statuses.
+        // Keep today's completed statuses (e.g. dropped at school) visible until a new trip starts.
         if ($bus && !$bus->activeTrip) {
             if ($bus->trip_status !== 'idle') {
                 $bus->update([
@@ -46,7 +48,9 @@ class DriverController extends Controller
                     'trip_completed_at' => now(),
                 ]);
             }
-            $bus->students()->whereIn('status', ['mounted', 'in_bus', 'dropped'])->update(['status' => 'waiting']);
+            if (!$latestTrip || optional($latestTrip->trip_date)->toDateString() !== now()->toDateString()) {
+                $bus->students()->whereIn('status', ['mounted', 'in_bus', 'dropped', 'absent'])->update(['status' => 'waiting']);
+            }
             $bus->refresh();
             $bus->load(['students.parent', 'activeTrip']);
         }
@@ -66,6 +70,8 @@ class DriverController extends Controller
                 ->get()
                 ->map(fn (Notification $notification) => [
                     'id' => (string) $notification->id,
+                    'studentId' => $notification->student_id ? (string) $notification->student_id : null,
+                    'type' => $notification->type,
                     'title' => $notification->title,
                     'helper' => $notification->message,
                     'read' => $notification->read_at !== null,
@@ -329,6 +335,8 @@ class DriverController extends Controller
                 ->get()
                 ->map(fn (Notification $notification) => [
                     'id' => (string) $notification->id,
+                    'studentId' => $notification->student_id ? (string) $notification->student_id : null,
+                    'type' => $notification->type,
                     'title' => $notification->title,
                     'helper' => $notification->message,
                     'read' => $notification->read_at !== null,

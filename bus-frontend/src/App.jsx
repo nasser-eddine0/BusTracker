@@ -46,6 +46,8 @@ function AnimatedRoutes() {
   const location = useLocation();
   const routeGroupKey = location.pathname.startsWith("/admin")
     ? "/admin"
+    : location.pathname.startsWith("/driver")
+      ? "/driver"
     : location.pathname;
 
   return (

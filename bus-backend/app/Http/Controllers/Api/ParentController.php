@@ -224,9 +224,12 @@ class ParentController extends Controller
             ->get()
             ->map(fn (Notification $notification) => [
                 'id' => (string) $notification->id,
+                'studentId' => $notification->student_id ? (string) $notification->student_id : null,
+                'type' => $notification->type,
                 'title' => $notification->title,
                 'message' => $notification->message,
                 'studentName' => $notification->payload['studentName'] ?? null,
+                'payload' => $notification->payload,
                 'read' => $notification->read_at !== null,
                 'createdAt' => optional($notification->date_envoi ?? $notification->created_at)->toIso8601String(),
             ])
@@ -255,6 +258,8 @@ class ParentController extends Controller
 
     private function serializeBus(Bus $bus): array
     {
+        $latestTrip = $bus->trips()->latest('trip_date')->latest('id')->first();
+
         return [
             'id' => (string) $bus->id,
             'name' => $bus->bus_name,
@@ -263,6 +268,7 @@ class ParentController extends Controller
             'plateNumber' => $bus->plate_number,
             'tripStatus' => $bus->trip_status,
             'activeTripId' => $bus->activeTrip?->id ? (string) $bus->activeTrip->id : null,
+            'latestTripType' => $latestTrip?->type,
             'location' => ($bus->latitude_actuelle !== null && $bus->longitude_actuelle !== null)
                 ? ['lat' => (float) $bus->latitude_actuelle, 'lng' => (float) $bus->longitude_actuelle]
                 : null,

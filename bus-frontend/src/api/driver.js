@@ -13,7 +13,7 @@ export async function fetchDriverNotifications() {
 export async function startDriverTrip(busId, payload = {}) {
   const response = await api.post("/driver/trip/start", {
     busId: Number(busId),
-    type: payload.type || "pickup",
+    type: payload.type || "aller",
   });
 
   return response.data;

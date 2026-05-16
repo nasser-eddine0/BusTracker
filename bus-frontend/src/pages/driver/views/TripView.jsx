@@ -63,14 +63,24 @@ function TripView({
               <p className="mt-1 text-xl font-extrabold text-rose-500">{absentCount}</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleStartTrip}
-            disabled={tripBusy || !bus?.id}
-            className="mt-6 h-14 w-full rounded-[18px] bg-accent text-lg font-extrabold text-slate-900 shadow-[var(--shadow-accent)] transition hover:bg-accent-strong disabled:opacity-60"
-          >
-            {t("startTrip")}
-          </button>
+          <div className="mt-6 grid gap-3">
+            <button
+              type="button"
+              onClick={() => handleStartTrip("aller")}
+              disabled={tripBusy || !bus?.id}
+              className="h-14 w-full rounded-[18px] bg-accent text-sm font-extrabold text-slate-900 shadow-[var(--shadow-accent)] transition hover:bg-accent-strong disabled:opacity-60"
+            >
+              {t("startTripAller")}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStartTrip("retour")}
+              disabled={tripBusy || !bus?.id}
+              className="h-14 w-full rounded-[18px] border border-line bg-white text-sm font-extrabold text-main shadow-sm transition hover:bg-card-soft disabled:opacity-60"
+            >
+              {t("startTripRetour")}
+            </button>
+          </div>
         </div>
       </div>
     );

@@ -23,7 +23,7 @@ class TripController extends Controller
     {
         $validated = $request->validate([
             'busId' => ['required', 'integer', 'exists:buses,id'],
-            'type' => ['nullable', Rule::in(['pickup', 'dropoff'])],
+            'type' => ['nullable', Rule::in(['aller', 'retour'])],
         ]);
 
         $driver = $request->user();
@@ -44,7 +44,7 @@ class TripController extends Controller
 
             $trip = Chauffeur::query()->findOrFail($driver->id)->startTrip(
                 $bus,
-                $validated['type'] ?? 'pickup'
+                $validated['type'] ?? 'aller'
             );
 
             $bus->update([
@@ -71,6 +71,10 @@ class TripController extends Controller
         });
 
         foreach ($bus->students as $student) {
+            $tripStartedMessage = $trip->type === 'retour'
+                ? "{$bus->bus_name} is returning from school."
+                : "{$bus->bus_name} has started the route to school.";
+
             $this->createParentNotification(
                 $student,
                 $bus,
@@ -78,8 +82,11 @@ class TripController extends Controller
                 (int) $driver->id,
                 'trip_started',
                 'Trip started',
-                "{$bus->bus_name} has started the route.",
-                $broadcaster
+                $tripStartedMessage,
+                $broadcaster,
+                [
+                    'tripType' => $trip->type,
+                ]
             );
         }
 
@@ -187,9 +194,13 @@ class TripController extends Controller
                 continue;
             }
 
-            $message = $status === 'dropped'
-                ? "{$student->full_name} has been dropped off."
-                : "{$student->full_name} was finalized as {$status}.";
+            if ($status === 'dropped') {
+                $message = $trip->type === 'retour'
+                    ? "{$student->full_name} has arrived home."
+                    : "{$student->full_name} has arrived at school.";
+            } else {
+                $message = "{$student->full_name} was finalized as {$status}.";
+            }
 
             $this->createParentNotification(
                 $student,
@@ -199,7 +210,11 @@ class TripController extends Controller
                 'trip_finalized',
                 'Trip finalized',
                 $message,
-                $broadcaster
+                $broadcaster,
+                [
+                    'tripType' => $trip->type,
+                    'studentStatus' => $status,
+                ]
             );
         }
 
@@ -377,6 +392,7 @@ class TripController extends Controller
         string $title,
         string $message,
         NotificationBroadcaster $broadcaster,
+        array $extraPayload = [],
     ): void {
         if (!$student->parent_id) {
             return;
@@ -393,10 +409,10 @@ class TripController extends Controller
             'title' => $title,
             'message' => $message,
             'date_envoi' => now(),
-            'payload' => [
+            'payload' => array_merge([
                 'studentName' => $student->full_name,
                 'busName' => $bus->bus_name,
-            ],
+            ], $extraPayload),
         ]);
 
         $broadcaster->broadcast($notification);

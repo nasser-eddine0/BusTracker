@@ -5,7 +5,7 @@ import { HiBell, HiTruck } from "react-icons/hi";
 import { HiMapPin, HiUser } from "react-icons/hi2";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { declareParentAbsence, declareParentReady, fetchParentDashboard, markParentNotificationsRead } from "../../api/parent";
+import { declareParentAbsence, declareParentReady, fetchParentDashboard, fetchParentNotifications, markParentNotificationsRead } from "../../api/parent";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase";
 import useFirebaseActiveTrip from "../../hooks/useFirebaseActiveTrip";
@@ -17,6 +17,7 @@ import AlertsTab from "./views/AlertsTab";
 import HomeTab from "./views/HomeTab";
 import MapTab from "./views/MapTab";
 import ProfileTab from "./views/ProfileTab";
+import AbsenceConfirmModal from "./components/AbsenceConfirmModal";
 import LocationValidationModal from "./components/LocationValidationModal";
 import { getDistanceInKilometers, getStatusConfig } from "./utils";
 
@@ -42,6 +43,7 @@ function ParentPage() {
   const [savingAbsence, setSavingAbsence] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showAbsenceModal, setShowAbsenceModal] = useState(false);
 
   const refreshParentDashboard = useCallback(async () => {
     try {
@@ -67,13 +69,57 @@ function ParentPage() {
     }
   }, [student]);
 
+  const applyIncomingNotification = useCallback((notification, options = {}) => {
+    if (notification?.studentId && String(notification.studentId) === String(student?.id || "")) {
+      const nextStatus = notification?.payload?.studentStatus;
+      if (notification.type === "trip_finalized" && nextStatus) {
+        setStudent((current) => (current ? { ...current, status: nextStatus } : current));
+      }
+    }
+
+    if (notification?.type === "trip_started" && notification?.payload?.tripType) {
+      setBus((current) => (current ? { ...current, latestTripType: notification.payload.tripType } : current));
+    }
+
+    if (notification?.type === "trip_finalized" && notification?.payload?.tripType) {
+      setBus((current) => (current ? { ...current, latestTripType: notification.payload.tripType } : current));
+    }
+
+    setNotifications((current) => {
+      if (current.some((item) => item.id === notification.id)) return current;
+      return [notification, ...current].slice(0, 50);
+    });
+
+    if (options.toast !== false && notification.message) {
+      toast(notification.message, { id: `parent-notif-${notification.id}` });
+    }
+  }, [student?.id]);
+
   useNotificationSocket({
     enabled: Boolean(user),
     onNotification: useCallback((notification) => {
-      setNotifications((current) => [notification, ...current].slice(0, 50));
-      if (notification.message) toast(notification.message);
-    }, []),
+      applyIncomingNotification(notification);
+    }, [applyIncomingNotification]),
   });
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const pollNotifications = async () => {
+      try {
+        const freshNotifications = await fetchParentNotifications();
+        const currentIds = new Set(notifications.map((item) => item.id));
+        freshNotifications
+          .filter((notification) => !currentIds.has(notification.id))
+          .forEach((notification) => applyIncomingNotification(notification));
+      } catch {
+        // Ignore polling failures; websocket or next poll will recover.
+      }
+    };
+
+    const intervalId = window.setInterval(pollNotifications, 15000);
+    return () => window.clearInterval(intervalId);
+  }, [applyIncomingNotification, notifications, user]);
 
   // Detect active trip from Firebase in real-time (no refresh needed)
   const liveTripId = useFirebaseTripForBus(bus?.id);
@@ -104,13 +150,31 @@ function ParentPage() {
     };
   }, [activeTrip?.live_attendance, student]);
 
+  useEffect(() => {
+    if (studentWithLiveStatus?.status === "absent") {
+      setReadyState("not-coming");
+      return;
+    }
+
+    if (studentWithLiveStatus?.status === "ready") {
+      setReadyState("ready");
+      return;
+    }
+
+    setReadyState("waiting");
+  }, [studentWithLiveStatus?.status]);
+
   const homeLocation = student?.homeLocation || null;
   const distanceToBus = useMemo(
     () => (!busWithLiveLocation?.location ? null : getDistanceInKilometers(homeLocation, busWithLiveLocation.location)),
     [busWithLiveLocation, homeLocation]
   );
   const unreadCount = notifications.filter((item) => item.read === false).length;
-  const statusConfig = useMemo(() => getStatusConfig(studentWithLiveStatus?.status, t, Boolean(effectiveTripId)), [studentWithLiveStatus?.status, t, effectiveTripId]);
+  const statusConfig = useMemo(() => getStatusConfig(studentWithLiveStatus?.status, t, {
+    hasActiveTrip: Boolean(effectiveTripId),
+    activeTripType: activeTrip?.type || null,
+    latestTripType: bus?.latestTripType || null,
+  }), [studentWithLiveStatus?.status, t, effectiveTripId, activeTrip?.type, bus?.latestTripType]);
 
   const notificationFeed = useMemo(() => {
     if (!notifications.length) {
@@ -206,7 +270,7 @@ function ParentPage() {
   }, [bus?.activeTripId, busWithLiveLocation?.location, distanceToBus, homeLocation, studentWithLiveStatus, t]);
 
   const handleReady = async () => {
-    if (!studentWithLiveStatus?.id) return;
+    if (!studentWithLiveStatus?.id || readyState === "not-coming") return;
     setReadyState("ready");
     toast.success(t("childReady"));
 
@@ -225,9 +289,18 @@ function ParentPage() {
     } catch { /* notification is best-effort */ }
   };
 
+  const handleOpenAbsenceModal = useCallback(() => {
+    if (!studentWithLiveStatus?.id || savingAbsence || readyState === "not-coming") return;
+    setShowAbsenceModal(true);
+  }, [readyState, savingAbsence, studentWithLiveStatus?.id]);
+
+  const handleCloseAbsenceModal = useCallback(() => {
+    if (savingAbsence) return;
+    setShowAbsenceModal(false);
+  }, [savingAbsence]);
+
   const handleNotComing = async () => {
     if (!studentWithLiveStatus?.id) return;
-    if (!window.confirm(t("confirmAbsence"))) return;
 
     setSavingAbsence(true);
     try {
@@ -247,6 +320,7 @@ function ParentPage() {
       }
 
       setReadyState("not-coming");
+      setShowAbsenceModal(false);
       toast.success(t("absenceConfirmed"));
     } catch (error) {
       toast.error(error?.response?.data?.message || t("absenceError"));
@@ -295,7 +369,7 @@ function ParentPage() {
             notifications={notifications}
             notificationFeed={notificationFeed}
             handleReady={handleReady}
-            handleNotComing={handleNotComing}
+            handleOpenAbsenceModal={handleOpenAbsenceModal}
             setActiveTab={setActiveTab}
           />
         );
@@ -311,6 +385,15 @@ function ParentPage() {
             setStudent(updatedStudent);
             setShowLocationModal(false);
           }}
+        />
+      )}
+      {showAbsenceModal && (
+        <AbsenceConfirmModal
+          t={t}
+          studentName={studentWithLiveStatus?.name || student?.name || ""}
+          savingAbsence={savingAbsence}
+          onCancel={handleCloseAbsenceModal}
+          onConfirm={handleNotComing}
         />
       )}
       <header className="sticky top-0 z-40 border-b border-line bg-white/80 backdrop-blur-xl">

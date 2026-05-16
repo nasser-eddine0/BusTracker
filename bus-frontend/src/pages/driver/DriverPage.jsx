@@ -37,6 +37,44 @@ function DriverPage() {
   const [tripBusy, setTripBusy] = useState(false);
   const [statusStage, setStatusStage] = useState("heading");
 
+  const applyNotificationStatus = useCallback((notification) => {
+    const studentId = notification?.studentId ? String(notification.studentId) : null;
+    if (!studentId) return;
+
+    let nextStatus = null;
+    if (notification.type === "absence_declared") nextStatus = "absent";
+    if (notification.type === "child_ready") nextStatus = "ready";
+    if (!nextStatus) return;
+
+    setStudentsMap((current) => (
+      current[studentId]
+        ? {
+            ...current,
+            [studentId]: {
+              ...current[studentId],
+              status: nextStatus,
+            },
+          }
+        : current
+    ));
+
+    setActiveTripState((current) => (
+      current
+        ? {
+            ...current,
+            live_attendance: {
+              ...(current.live_attendance || {}),
+              [studentId]: {
+                ...(current.live_attendance?.[studentId] || {}),
+                status: nextStatus,
+                updated_at: new Date().toISOString(),
+              },
+            },
+          }
+        : current
+    ));
+  }, []);
+
   const refreshDriverDashboard = useCallback(async () => {
     try {
       const data = await fetchDriverDashboard();
@@ -78,12 +116,13 @@ function DriverPage() {
   useNotificationSocket({
     enabled: Boolean(user),
     onNotification: useCallback((notification) => {
+      applyNotificationStatus(notification);
       setDriverEvents((current) => [
         { id: notification.id, title: notification.title, helper: notification.message, read: false, createdAt: notification.createdAt || new Date().toISOString() },
         ...current,
       ].slice(0, 20));
       if (notification.message) toast(notification.message);
-    }, []),
+    }, [applyNotificationStatus]),
   });
 
   const unreadDriverCount = useMemo(
@@ -108,6 +147,7 @@ function DriverPage() {
           const currentIds = new Set(current.map((e) => e.id));
           const newOnes = freshNotifs.filter((n) => !currentIds.has(n.id));
           if (newOnes.length > 0) {
+            newOnes.forEach(applyNotificationStatus);
             // Schedule toasts OUTSIDE this updater to avoid StrictMode double-fire
             setTimeout(() => {
               newOnes.forEach((n) => {
@@ -122,7 +162,7 @@ function DriverPage() {
     };
     const intervalId = window.setInterval(pollNotifs, 15000);
     return () => window.clearInterval(intervalId);
-  }, [tripStarted]);
+  }, [applyNotificationStatus, tripStarted]);
 
   const busLive = useMemo(
     () => (bus ? { ...bus, location: liveLocations[String(bus.id)] || bus.location || null } : null),
@@ -254,12 +294,12 @@ function DriverPage() {
     return "trip";
   }, [location.pathname]);
 
-  const handleStartTrip = async () => {
+  const handleStartTrip = async (type) => {
     if (!bus?.id) return;
 
     setTripBusy(true);
     try {
-      const data = await startDriverTrip(bus.id);
+      const data = await startDriverTrip(bus.id, { type });
       const nextTripId = data.tripId;
       const nextLiveAttendance = Object.fromEntries(
         Object.entries(studentsMap).map(([studentId, student]) => [
@@ -276,6 +316,7 @@ function DriverPage() {
           trip_id: Number(nextTripId),
           bus_id: Number(bus.id),
           driver_id: user?.id ? Number(user.id) : null,
+          type: data.trip?.type || type || "aller",
           status: "in_progress",
           started_at: data.trip?.startedAt || new Date().toISOString(),
           live_location: busLive?.location
@@ -296,6 +337,7 @@ function DriverPage() {
         trip_id: Number(nextTripId),
         bus_id: Number(bus.id),
         driver_id: user?.id ? Number(user.id) : null,
+        type: data.trip?.type || type || "aller",
         status: "in_progress",
         started_at: data.trip?.startedAt || new Date().toISOString(),
         live_location: busLive?.location || null,
@@ -367,6 +409,7 @@ function DriverPage() {
 
     setTripBusy(true);
     try {
+      const tripType = activeTripState?.type || "aller";
       // Try Firebase first, fall back to local React state if permission denied
       let liveAttendance = {};
       try {
@@ -379,10 +422,20 @@ function DriverPage() {
 
       const attendance = Object.entries(studentsMap).map(([studentId, student]) => {
         const liveEntry = liveAttendance[String(studentId)] || {};
+        const rawStatus = liveEntry.status || student.status;
+        const normalizedStatus = normalizeStudentStatus(rawStatus);
+
+        let finalStatus = normalizedStatus;
+        if (tripType === "aller" && normalizedStatus === "mounted") {
+          finalStatus = "dropped";
+        }
+        if (tripType === "retour" && normalizedStatus === "mounted") {
+          finalStatus = "dropped";
+        }
 
         return {
           student_id: Number(studentId),
-          status: normalizeStudentStatus(liveEntry.status || student.status),
+          status: finalStatus,
           recorded_at: liveEntry.updated_at || new Date().toISOString(),
         };
       });

@@ -17,7 +17,7 @@ function HomeTab({
   notifications,
   notificationFeed,
   handleReady,
-  handleNotComing,
+  handleOpenAbsenceModal,
   setActiveTab,
 }) {
   return (
@@ -88,7 +88,7 @@ function HomeTab({
         <button
           type="button"
           onClick={handleReady}
-          disabled={readyState === "ready"}
+          disabled={readyState !== "waiting"}
           className="flex flex-col items-center gap-2 rounded-[20px] border border-line bg-white p-4 shadow-sm transition active:scale-[0.97] disabled:opacity-50"
         >
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-500">
@@ -99,7 +99,7 @@ function HomeTab({
         </button>
         <button
           type="button"
-          onClick={handleNotComing}
+          onClick={handleOpenAbsenceModal}
           disabled={savingAbsence || readyState === "not-coming"}
           className="flex flex-col items-center gap-2 rounded-[20px] border border-line bg-white p-4 shadow-sm transition active:scale-[0.97] disabled:opacity-50"
         >

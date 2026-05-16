@@ -19,11 +19,23 @@ export function getDistanceInKilometers(firstPoint, secondPoint) {
   return earthRadius * c;
 }
 
-export function getStatusConfig(studentStatus, t, hasActiveTrip = false) {
+export function getStatusConfig(studentStatus, t, options = {}) {
+  const hasActiveTrip = Boolean(options.hasActiveTrip);
+  const activeTripType = options.activeTripType || null;
+  const latestTripType = options.latestTripType || null;
+
+  if (hasActiveTrip && activeTripType === "retour" && (studentStatus === "waiting" || studentStatus === "ready" || studentStatus === "mounted")) {
+    return { text: t("busComingBackFromSchool"), color: "bg-amber-500", textColor: "text-white", icon: HiTruck, pulse: true };
+  }
+
   if (studentStatus === "entered" || studentStatus === "mounted") {
     return { text: t("inBus"), color: "bg-emerald-500", textColor: "text-white", icon: HiTruck, pulse: true };
   }
   if (studentStatus === "dropped") {
+    if ((hasActiveTrip && activeTripType === "retour") || latestTripType === "retour") {
+      return { text: t("arrivedHome"), color: "bg-emerald-500", textColor: "text-white", icon: HiCheckCircle, pulse: false };
+    }
+
     return { text: t("arrivedSchool"), color: "bg-accent", textColor: "text-slate-900", icon: HiCheckCircle, pulse: false };
   }
   if (studentStatus === "absent") {
@@ -31,7 +43,13 @@ export function getStatusConfig(studentStatus, t, hasActiveTrip = false) {
   }
   if (studentStatus === "waiting") {
     if (hasActiveTrip) {
-      return { text: t("busApproaching"), color: "bg-sky-500", textColor: "text-white", icon: HiSignal, pulse: true };
+      return {
+        text: activeTripType === "retour" ? t("busComingBackFromSchool") : t("busApproaching"),
+        color: activeTripType === "retour" ? "bg-amber-500" : "bg-sky-500",
+        textColor: "text-white",
+        icon: activeTripType === "retour" ? HiTruck : HiSignal,
+        pulse: true,
+      };
     }
     return { text: t("waitingForBus") || t("waiting"), color: "bg-slate-400", textColor: "text-white", icon: HiSignal, pulse: false };
   }
