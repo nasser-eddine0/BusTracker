@@ -19,7 +19,7 @@ import { matchesSmartSearch } from "../utils";
 import AdminUserForm from "../components/AdminUserForm";
 import ModalShell from "../components/ModalShell";
 
-function UsersPage({ admins, drivers, parents, buses, onRefresh }) {
+function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap }) {
   const { t } = useLanguage();
   const [activeRole, setActiveRole] = useState("admin");
   const [search, setSearch] = useState("");
@@ -88,10 +88,10 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh }) {
         toast.success(t("accountCreatedMsg"));
       }
 
-      await onRefresh();
       setCreating(false);
       setEditingUser(null);
       setForm(emptyUserForm);
+      void onRefresh();
     } catch (error) {
       toast.error(error?.response?.data?.message || t("saveError"));
     } finally {
@@ -100,27 +100,51 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh }) {
   };
 
   const handleDisable = async (userId) => {
+    // Optimistic Update: Update status locally first
+    setBootstrap((prev) => ({
+      ...prev,
+      users: {
+        ...prev.users,
+        [userId]: { ...prev.users[userId], status: "disabled" }
+      },
+      // Also update in specialized collections if needed
+      drivers: prev.drivers[userId] ? { ...prev.drivers[userId], status: "disabled" } : prev.drivers,
+      parents: prev.parents[userId] ? { ...prev.parents[userId], status: "disabled" } : prev.parents,
+    }));
+
     try {
       await disableAdminUser(userId);
-      await onRefresh();
       toast.success(t("accountDisabled"));
       setEditingUser(null);
+      void onRefresh();
     } catch (error) {
       toast.error(error?.response?.data?.message || t("saveError"));
+      void onRefresh(); // Rollback by refreshing from server
     }
   };
 
   const handleDelete = async (userId) => {
     if (!window.confirm(t("deleteConfirm"))) return;
 
+    setBootstrap((prev) => {
+      const newUsers = { ...prev.users };
+      delete newUsers[userId];
+      const newDrivers = { ...prev.drivers };
+      delete newDrivers[userId];
+      const newParents = { ...prev.parents };
+      delete newParents[userId];
+      return { ...prev, users: newUsers, drivers: newDrivers, parents: newParents };
+    });
+
     try {
       await deleteAdminUser(userId);
-      await onRefresh();
       toast.success(t("accountDeleted"));
       setEditingUser(null);
       setSelectedIds([]);
+      void onRefresh();
     } catch (error) {
       toast.error(error?.response?.data?.message || t("saveError"));
+      void onRefresh();
     }
   };
 
@@ -130,9 +154,9 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh }) {
 
     try {
       await bulkDeleteAdminUsers(selectedIds);
-      await onRefresh();
       toast.success(`${selectedIds.length} ${t("accountDeleted")}`);
       setSelectedIds([]);
+      void onRefresh();
     } catch (error) {
       toast.error(error?.response?.data?.message || t("saveError"));
     }

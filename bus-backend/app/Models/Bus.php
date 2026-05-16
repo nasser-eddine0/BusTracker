@@ -56,8 +56,8 @@ class Bus extends Model
     public function activeTrip(): HasOne
     {
         return $this->hasOne(Trip::class)
-            ->where('status', 'in_progress')
-            ->whereDate('trip_date', now()->toDateString())
+            ->where('trips.status', 'in_progress')
+            ->whereDate('trips.trip_date', now()->toDateString())
             ->latestOfMany();
     }
 

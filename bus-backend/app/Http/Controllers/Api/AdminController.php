@@ -26,16 +26,34 @@ class AdminController extends Controller
     public function bootstrap(): JsonResponse
     {
         $admin = request()->user();
-        $users = User::query()->orderBy('name')->get();
-        $buses = Bus::query()->with(['driver', 'students', 'activeTrip'])->orderBy('bus_name')->get();
-        $students = Student::query()->with(['parent', 'bus'])->orderBy('full_name')->get();
-        $drivers = Chauffeur::query()->orderBy('name')->get();
-        $parents = ParentAccount::query()->orderBy('name')->get();
+        
+        // Use select to reduce payload size and eager load only necessary relations
+        $users = User::query()
+            ->select(['id', 'name', 'email', 'phone', 'role', 'status', 'cin', 'default_password'])
+            ->with([
+                'drivenBus:id,driver_id,plate_number',
+                'children:id,parent_id',
+            ])
+            ->orderBy('name')
+            ->get();
+
+        $buses = Bus::query()
+            ->with(['driver:id,name,email', 'activeTrip'])
+            ->orderBy('bus_name')
+            ->get();
+
+        $students = Student::query()
+            ->with(['parent:id,name,email,phone', 'bus:id,bus_name'])
+            ->orderBy('full_name')
+            ->get();
+
+        $drivers = $users->filter(fn (User $user) => $user->role === 'driver')->values();
+        $parents = $users->filter(fn (User $user) => $user->role === 'parent')->values();
 
         return response()->json([
             'users' => $users->mapWithKeys(fn (User $user) => [(string) $user->id => $this->serializeUser($user)])->all(),
-            'drivers' => $drivers->mapWithKeys(fn (Chauffeur $user) => [(string) $user->id => $this->serializeDriver($user)])->all(),
-            'parents' => $parents->mapWithKeys(fn (ParentAccount $user) => [(string) $user->id => $this->serializeParent($user)])->all(),
+            'drivers' => $drivers->mapWithKeys(fn (User $user) => [(string) $user->id => $this->serializeDriver($user)])->all(),
+            'parents' => $parents->mapWithKeys(fn (User $user) => [(string) $user->id => $this->serializeParent($user)])->all(),
             'students' => $students->mapWithKeys(fn (Student $student) => [(string) $student->id => $this->serializeStudent($student)])->all(),
             'buses' => $buses->mapWithKeys(fn (Bus $bus) => [(string) $bus->id => $this->serializeBus($bus)])->all(),
             'summary' => [
@@ -74,12 +92,12 @@ class AdminController extends Controller
                 $this->syncDriverBus($user, $validated['busId'] ?? null);
             }
 
-            return $user->fresh(['drivenBus', 'children']);
+            return $user;
         });
 
         return response()->json([
             'message' => 'User created.',
-            'user' => $this->serializeUser($user),
+            'user' => $this->serializeUser($user->loadMissing(['drivenBus', 'children'])),
         ], 201);
     }
 
@@ -122,7 +140,7 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'User updated.',
-            'user' => $this->serializeUser($user->fresh(['drivenBus', 'children'])),
+            'user' => $this->serializeUser($user->loadMissing(['drivenBus', 'children'])),
         ]);
     }
 
@@ -576,7 +594,7 @@ class AdminController extends Controller
 
     private function serializeBus(Bus $bus): array
     {
-        $bus->loadMissing(['driver', 'students']);
+        $bus->loadMissing(['driver', 'activeTrip']);
 
         return [
             'name' => $bus->bus_name,

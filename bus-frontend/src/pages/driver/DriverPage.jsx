@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
-import { get, onValue, ref, remove, set, update } from "firebase/database";
+import { get, ref, remove, set, update } from "firebase/database";
 import toast from "react-hot-toast";
 import Sidebar from "../../components/ui/Sidebar";
 import { finalizeDriverTrip, fetchDriverDashboard, fetchDriverNotifications, startDriverTrip, updateDriverStudentStatus, pingDriverLocation, nudgeParent, markDriverNotificationsRead } from "../../api/driver";
 import { useAuth } from "../../context/AuthContext";
+import { useActiveTripById, useRealtime } from "../../context/useRealtime";
 import { db } from "../../firebase";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
-import useFirebaseBusLocations from "../../hooks/useFirebaseBusLocations";
 import { useLanguage } from "../../i18n";
 import { buildDriverNavigation } from "./constants";
 import DriverHeader from "./components/DriverHeader";
@@ -26,16 +26,16 @@ function DriverPage() {
   const { user, signOut } = useAuth();
   const { t } = useLanguage();
   const driverNavigation = useMemo(() => buildDriverNavigation(t), [t]);
-  const liveLocations = useFirebaseBusLocations();
+  const { busLocations: liveLocations } = useRealtime();
   const [bus, setBus] = useState(null);
   const [studentsMap, setStudentsMap] = useState({});
   const [driverEvents, setDriverEvents] = useState([]);
   const [activeTripId, setActiveTripId] = useState(null);
-  const [activeTripState, setActiveTripState] = useState(null);
   const [tripStarted, setTripStarted] = useState(false);
   const [tripCompleted, setTripCompleted] = useState(false);
   const [tripBusy, setTripBusy] = useState(false);
   const [statusStage, setStatusStage] = useState("heading");
+  const activeTripState = useActiveTripById(activeTripId);
 
   const applyNotificationStatus = useCallback((notification) => {
     const studentId = notification?.studentId ? String(notification.studentId) : null;
@@ -58,21 +58,6 @@ function DriverPage() {
         : current
     ));
 
-    setActiveTripState((current) => (
-      current
-        ? {
-            ...current,
-            live_attendance: {
-              ...(current.live_attendance || {}),
-              [studentId]: {
-                ...(current.live_attendance?.[studentId] || {}),
-                status: nextStatus,
-                updated_at: new Date().toISOString(),
-              },
-            },
-          }
-        : current
-    ));
   }, []);
 
   const refreshDriverDashboard = useCallback(async () => {
@@ -99,19 +84,6 @@ function DriverPage() {
       navigate("/driver/trip", { replace: true });
     }
   }, [location.pathname, navigate]);
-
-  useEffect(() => {
-    if (!activeTripId) {
-      setActiveTripState(null);
-      return undefined;
-    }
-
-    const unsubscribe = onValue(ref(db, `active_trips/${activeTripId}`), (snapshot) => {
-      setActiveTripState(snapshot.val() || null);
-    });
-
-    return () => unsubscribe();
-  }, [activeTripId]);
 
   useNotificationSocket({
     enabled: Boolean(user),
@@ -199,6 +171,7 @@ function DriverPage() {
   }, [waitingStudents, currentTargetId, tripStarted]);
 
   const currentStudent = routeStudents.find((s) => s.id === currentTargetId && (s.status === "waiting" || s.status === "ready")) || waitingStudents[0] || null;
+  const currentStudentId = currentStudent?.id || null;
 
   const handleSelectStudent = useCallback((studentId) => {
     setCurrentTargetId(studentId);
@@ -209,7 +182,7 @@ function DriverPage() {
   useEffect(() => {
     if (!tripStarted || !currentStudent) return;
     setStatusStage("heading");
-  }, [currentStudent?.id, tripStarted]);
+  }, [currentStudent, tripStarted]);
 
   // Update statusStage based on real distance from backend ping
   useEffect(() => {
@@ -231,16 +204,22 @@ function DriverPage() {
     if (!tripStarted || !activeTripId) return undefined;
     if (!("geolocation" in navigator)) return undefined;
 
+    let cancelled = false;
+
     const writeLocation = () => {
+      if (!navigator.onLine || cancelled) return;
+
       navigator.geolocation.getCurrentPosition(
         async ({ coords }) => {
+          if (!navigator.onLine || cancelled) return;
+
           // 1. Ping the backend (geofencing + bus coordinates update)
           try {
             const pingResult = await pingDriverLocation(
               activeTripId,
               coords.latitude,
               coords.longitude,
-              currentStudent?.id || null
+              currentStudentId
             );
             if (pingResult.distance !== null && pingResult.distance !== undefined) {
               setDistanceToTarget(pingResult.distance);
@@ -272,9 +251,10 @@ function DriverPage() {
     const intervalId = window.setInterval(writeLocation, 5000);
 
     return () => {
+      cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeTripId, tripStarted, currentStudent?.id]);
+  }, [activeTripId, tripStarted, currentStudentId]);
 
   const handleNudgeParent = async () => {
     if (!currentStudent?.id || !activeTripId) return;
@@ -333,16 +313,6 @@ function DriverPage() {
       }
 
       setActiveTripId(nextTripId);
-      setActiveTripState({
-        trip_id: Number(nextTripId),
-        bus_id: Number(bus.id),
-        driver_id: user?.id ? Number(user.id) : null,
-        type: data.trip?.type || type || "aller",
-        status: "in_progress",
-        started_at: data.trip?.startedAt || new Date().toISOString(),
-        live_location: busLive?.location || null,
-        live_attendance: nextLiveAttendance,
-      });
       setTripStarted(true);
       setTripCompleted(false);
       toast.success(t("tripStarted"));
@@ -367,14 +337,6 @@ function DriverPage() {
         busId: bus.id,
         status,
       });
-
-      setActiveTripState((current) => ({
-        ...(current || {}),
-        live_attendance: {
-          ...(current?.live_attendance || {}),
-          [String(currentStudent.id)]: updatedAttendance,
-        },
-      }));
 
       if (activeTripId) {
         try {
@@ -452,7 +414,6 @@ function DriverPage() {
 
       try { await remove(ref(db, `active_trips/${activeTripId}`)); } catch { /* Firebase cleanup optional */ }
       setActiveTripId(null);
-      setActiveTripState(null);
       setTripCompleted(true);
       toast.success(t("dropCompleted"));
       await refreshDriverDashboard();

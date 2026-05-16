@@ -1,6 +1,5 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getDatabase } from "firebase/database";
+import { getApp, getApps, initializeApp } from "firebase/app";
+import { getDatabase, goOffline, goOnline } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCITDWaNEthPPPwyE5h5mYyyxtpFIZNGvo",
@@ -9,6 +8,28 @@ const firebaseConfig = {
   projectId: "bustracker-5e6c4",
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const db = getDatabase(app);
+
+let startedConnectionManager = false;
+
+export function startFirebaseConnectionManager() {
+  if (startedConnectionManager || typeof window === "undefined") return;
+
+  startedConnectionManager = true;
+
+  const handleOnline = () => {
+    goOnline(db);
+  };
+
+  const handleOffline = () => {
+    goOffline(db);
+  };
+
+  window.addEventListener("online", handleOnline);
+  window.addEventListener("offline", handleOffline);
+
+  if (!navigator.onLine) {
+    goOffline(db);
+  }
+}

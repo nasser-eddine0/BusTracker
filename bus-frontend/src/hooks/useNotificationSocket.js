@@ -1,15 +1,17 @@
 import { useEffect } from "react";
 
 function getSocketUrl() {
-  return import.meta.env.VITE_NOTIFICATIONS_WS_URL || `ws://${window.location.hostname}:8081`;
+  const configuredUrl = import.meta.env.VITE_NOTIFICATIONS_WS_URL?.trim();
+  return configuredUrl || null;
 }
 
 export default function useNotificationSocket({ enabled = true, onNotification }) {
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!enabled || !token || typeof onNotification !== "function") return undefined;
+    const socketUrl = getSocketUrl();
+    if (!enabled || !token || typeof onNotification !== "function" || !socketUrl) return undefined;
 
-    const socket = new WebSocket(getSocketUrl());
+    const socket = new WebSocket(socketUrl);
     let isCancelled = false;
 
     socket.addEventListener("open", () => {
@@ -44,7 +46,7 @@ export default function useNotificationSocket({ enabled = true, onNotification }
     return () => {
       isCancelled = true;
 
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
         socket.close();
       }
     };

@@ -6,8 +6,7 @@ import { HiDatabase, HiHome, HiTruck, HiUserGroup } from "react-icons/hi";
 import { HiClipboardDocumentList, HiUsers } from "react-icons/hi2";
 import { fetchAdminBootstrap } from "../../api/admin";
 import AppShell from "../../components/ui/AppShell";
-import useFirebaseActiveTrips from "../../hooks/useFirebaseActiveTrips";
-import useFirebaseBusLocations from "../../hooks/useFirebaseBusLocations";
+import { useRealtime } from "../../context/useRealtime";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
 import { useLanguage } from "../../i18n";
 import { buildAdminNavigation } from "./utils";
@@ -19,11 +18,20 @@ import ImportPage from "./pages/ImportPage";
 import UsersPage from "./pages/UsersPage";
 
 const MotionDiv = motion.div;
+const ADMIN_BOOTSTRAP_CACHE_KEY = "admin_bootstrap_cache";
+
+function readBootstrapCache() {
+  try {
+    const raw = sessionStorage.getItem(ADMIN_BOOTSTRAP_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 function AdminPage() {
   const location = useLocation();
-  const activeTrips = useFirebaseActiveTrips();
-  const busLocations = useFirebaseBusLocations();
+  const { activeTrips, busLocations } = useRealtime();
   const { t } = useLanguage();
   const adminNavigation = useMemo(
     () =>
@@ -37,7 +45,7 @@ function AdminPage() {
       }),
     [t]
   );
-  const [bootstrap, setBootstrap] = useState({
+  const [bootstrap, setBootstrap] = useState(() => readBootstrapCache() || {
     users: {},
     drivers: {},
     parents: {},
@@ -52,6 +60,7 @@ function AdminPage() {
     try {
       const data = await fetchAdminBootstrap();
       setBootstrap(data);
+      sessionStorage.setItem(ADMIN_BOOTSTRAP_CACHE_KEY, JSON.stringify(data));
       setAdminNotifications(data.notifications || []);
     } catch (error) {
       toast.error(error?.response?.data?.message || t("loadError"));
@@ -59,7 +68,9 @@ function AdminPage() {
   }, [t]);
 
   useEffect(() => {
-    refreshAdminData();
+    queueMicrotask(() => {
+      refreshAdminData();
+    });
   }, [refreshAdminData]);
 
   useNotificationSocket({
@@ -122,9 +133,9 @@ function AdminPage() {
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage buses={buses} students={students} drivers={drivers} parents={parents} admins={admins} summary={bootstrap.summary || {}} />} />
-            <Route path="users" element={<UsersPage admins={admins} drivers={drivers} parents={parents} buses={buses} onRefresh={refreshAdminData} />} />
+            <Route path="users" element={<UsersPage admins={admins} drivers={drivers} parents={parents} buses={buses} onRefresh={refreshAdminData} setBootstrap={setBootstrap} />} />
             <Route path="import" element={<ImportPage students={students} parents={parents} buses={buses} onRefresh={refreshAdminData} />} />
-            <Route path="fleet" element={<FleetPage buses={buses} drivers={drivers} students={students} onRefresh={refreshAdminData} />} />
+            <Route path="fleet" element={<FleetPage buses={buses} drivers={drivers} students={students} onRefresh={refreshAdminData} setBootstrap={setBootstrap} />} />
             <Route path="assignments" element={<AssignmentsPage buses={buses} students={students} onRefresh={refreshAdminData} />} />
             <Route path="reports" element={<AdminDashboard buses={buses} students={students} drivers={drivers} parents={parents} notifications={adminNotifications} summary={bootstrap.summary || {}} activeTrips={activeTrips} initialTab="archive" />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />

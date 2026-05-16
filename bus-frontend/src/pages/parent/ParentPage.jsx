@@ -7,11 +7,9 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { declareParentAbsence, declareParentReady, fetchParentDashboard, fetchParentNotifications, markParentNotificationsRead } from "../../api/parent";
 import { useAuth } from "../../context/AuthContext";
+import { useActiveTripById, useRealtime, useTripForBus } from "../../context/useRealtime";
 import { db } from "../../firebase";
-import useFirebaseActiveTrip from "../../hooks/useFirebaseActiveTrip";
-import useFirebaseTripForBus from "../../hooks/useFirebaseTripForBus";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
-import useFirebaseBusLocations from "../../hooks/useFirebaseBusLocations";
 import { useLanguage } from "../../i18n";
 import AlertsTab from "./views/AlertsTab";
 import HomeTab from "./views/HomeTab";
@@ -27,7 +25,7 @@ function ParentPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { t } = useLanguage();
-  const busLocations = useFirebaseBusLocations();
+  const { busLocations } = useRealtime();
   const tabs = useMemo(() => [
     { id: "home", label: t("home"), icon: HiTruck },
     { id: "map", label: t("map"), icon: HiMapPin },
@@ -122,9 +120,9 @@ function ParentPage() {
   }, [applyIncomingNotification, notifications, user]);
 
   // Detect active trip from Firebase in real-time (no refresh needed)
-  const liveTripId = useFirebaseTripForBus(bus?.id);
+  const liveTripId = useTripForBus(bus?.id);
   const effectiveTripId = liveTripId || bus?.activeTripId || null;
-  const activeTrip = useFirebaseActiveTrip(effectiveTripId);
+  const activeTrip = useActiveTripById(effectiveTripId);
 
   const busWithLiveLocation = useMemo(() => {
     if (!bus) return null;

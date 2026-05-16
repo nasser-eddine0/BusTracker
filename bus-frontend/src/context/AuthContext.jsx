@@ -25,9 +25,21 @@ function normalizeUser(user) {
   };
 }
 
+function readCachedUser() {
+  try {
+    const rawUser = localStorage.getItem("auth_user");
+    return rawUser ? normalizeUser(JSON.parse(rawUser)) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => readCachedUser());
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return Boolean(localStorage.getItem("token")) && !readCachedUser();
+  });
 
   const refreshProfile = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -41,9 +53,11 @@ export function AuthProvider({ children }) {
       const response = await api.get("/me");
       const nextUser = normalizeUser(response.data.user);
       setUser(nextUser);
+      localStorage.setItem("auth_user", JSON.stringify(nextUser));
       return nextUser;
     } catch {
       localStorage.removeItem("token");
+      localStorage.removeItem("auth_user");
       setUser(null);
       return null;
     } finally {
@@ -59,7 +73,9 @@ export function AuthProvider({ children }) {
     const response = await api.post("/login", payload);
     localStorage.setItem("token", response.data.access_token);
     const nextUser = normalizeUser(response.data.user);
+    localStorage.setItem("auth_user", JSON.stringify(nextUser));
     setUser(nextUser);
+    setLoading(false);
     return nextUser;
   }, []);
 
@@ -67,7 +83,9 @@ export function AuthProvider({ children }) {
     const response = await api.post("/register", payload);
     localStorage.setItem("token", response.data.access_token);
     const nextUser = normalizeUser(response.data.user);
+    localStorage.setItem("auth_user", JSON.stringify(nextUser));
     setUser(nextUser);
+    setLoading(false);
     return nextUser;
   }, []);
 
@@ -78,7 +96,9 @@ export function AuthProvider({ children }) {
       // local cleanup still matters even if the API call fails
     } finally {
       localStorage.removeItem("token");
+      localStorage.removeItem("auth_user");
       setUser(null);
+      setLoading(false);
     }
   }, []);
 

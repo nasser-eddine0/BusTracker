@@ -11,7 +11,7 @@ import { matchesSmartSearch } from "../utils";
 import BusForm from "../components/BusForm";
 import ModalShell from "../components/ModalShell";
 
-function FleetPage({ buses, drivers, students, onRefresh }) {
+function FleetPage({ buses, drivers, students, onRefresh, setBootstrap }) {
   const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyBusForm);
@@ -26,6 +26,14 @@ function FleetPage({ buses, drivers, students, onRefresh }) {
 
   const handleDelete = async (busId) => {
     if (!window.confirm(t("deleteConfirm"))) return;
+    
+    // Optimistic Update: Remove from local state immediately
+    setBootstrap((prev) => {
+      const newBuses = { ...prev.buses };
+      delete newBuses[busId];
+      return { ...prev, buses: newBuses };
+    });
+
     try {
       await deleteAdminBus(busId);
       await onRefresh();
@@ -33,6 +41,7 @@ function FleetPage({ buses, drivers, students, onRefresh }) {
       setSelectedIds((prev) => prev.filter((id) => id !== busId));
     } catch (error) {
       toast.error(error?.response?.data?.message || t("saveError"));
+      await onRefresh(); // Rollback
     }
   };
 
