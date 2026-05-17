@@ -1,116 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { MapContainer, Marker, Polyline, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import { busIcon, pickupIcon } from "../constants";
 
 /* ──────────────────────────────────────────────────
-   OSRM road routing via direct fetch
+   RouteLine  –  always-visible styled polyline
+   Draws a curved line between bus and student.
+   No external API dependency — instant & reliable.
    ────────────────────────────────────────────────── */
-const ROUTE_STYLE = { color: "#2563eb", weight: 5, opacity: 0.85 };
-const FALLBACK_STYLE = { color: "#2563eb", weight: 4, opacity: 0.5, dashArray: "10, 6" };
-const MIN_MOVE_METERS = 30;
-const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
+const ROUTE_STYLE = { color: "#2563eb", weight: 5, opacity: 0.75, dashArray: "10, 6" };
 
-function haversineMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// Decode Google-style encoded polyline (OSRM default)
-function decodePolyline(encoded) {
-  const points = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-  while (index < encoded.length) {
-    let shift = 0;
-    let result = 0;
-    let byte;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    lat += result & 1 ? ~(result >> 1) : result >> 1;
-    shift = 0;
-    result = 0;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-    lng += result & 1 ? ~(result >> 1) : result >> 1;
-    points.push([lat / 1e5, lng / 1e5]);
-  }
-  return points;
-}
-
-/* Hook: fetch OSRM route, returns { path, isRoad } */
-function useOsrmRoute(from, to) {
-  const [path, setPath] = useState([]);
-  const [isRoad, setIsRoad] = useState(false);
-  const lastFrom = useRef(null);
-  const lastTo = useRef(null);
-  const abortRef = useRef(null);
-
-  const fetchRoute = useCallback(async (a, b) => {
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    // Show straight line immediately while OSRM loads
-    setPath([[a.lat, a.lng], [b.lat, b.lng]]);
-    setIsRoad(false);
-
-    try {
-      const url = `${OSRM_URL}/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=polyline`;
-      const res = await fetch(url, { signal: controller.signal });
-      const data = await res.json();
-      if (data.code === "Ok" && data.routes?.[0]?.geometry) {
-        const decoded = decodePolyline(data.routes[0].geometry);
-        setPath(decoded);
-        setIsRoad(true);
-      }
-    } catch {
-      // OSRM failed — keep the straight-line fallback
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!from || !to) {
-      setPath([]);
-      setIsRoad(false);
-      lastFrom.current = null;
-      lastTo.current = null;
-      return;
-    }
-
-    const destChanged =
-      !lastTo.current ||
-      lastTo.current.lat !== to.lat ||
-      lastTo.current.lng !== to.lng;
-    const driverMoved =
-      !lastFrom.current ||
-      haversineMeters(lastFrom.current.lat, lastFrom.current.lng, from.lat, from.lng) >= MIN_MOVE_METERS;
-
-    if (destChanged || driverMoved) {
-      lastFrom.current = { ...from };
-      lastTo.current = { ...to };
-      fetchRoute(from, to);
-    }
-  }, [from?.lat, from?.lng, to?.lat, to?.lng, fetchRoute]);
-
-  // Cleanup abort on unmount
-  useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
-
-  return { path, isRoad };
+function buildCurvedPath(from, to) {
+  if (!from || !to) return [];
+  const midLat = (from.lat + to.lat) / 2;
+  const midLng = (from.lng + to.lng) / 2;
+  // Offset the midpoint perpendicular to the line for a subtle curve
+  const dLat = to.lat - from.lat;
+  const dLng = to.lng - from.lng;
+  const offset = Math.sqrt(dLat * dLat + dLng * dLng) * 0.15;
+  return [
+    [from.lat, from.lng],
+    [midLat + dLng * 0.1, midLng - dLat * 0.1 + offset * 0.01],
+    [to.lat, to.lng],
+  ];
 }
 
 /* ──────────────────────────────────────────────────
@@ -150,27 +62,14 @@ function MapUpdater({ busLocation, pickupLocation }) {
 /* ──────────────────────────────────────────────────
    DriverMapPanel  –  the main exported component
    ────────────────────────────────────────────────── */
-function DriverMapPanelInner({ busLocation, pickupLocation }) {
-  const { path, isRoad } = useOsrmRoute(busLocation, pickupLocation);
-
-  return (
-    <>
-      <MapUpdater busLocation={busLocation} pickupLocation={pickupLocation} />
-      {path.length > 1 && (
-        <Polyline positions={path} pathOptions={isRoad ? ROUTE_STYLE : FALLBACK_STYLE} />
-      )}
-      {busLocation ? <Marker position={[busLocation.lat, busLocation.lng]} icon={busIcon} /> : null}
-      {pickupLocation ? <Marker position={[pickupLocation.lat, pickupLocation.lng]} icon={pickupIcon} /> : null}
-    </>
-  );
-}
-
 function DriverMapPanel({ busLocation, pickupLocation }) {
   const center = pickupLocation
     ? [pickupLocation.lat, pickupLocation.lng]
     : busLocation
       ? [busLocation.lat, busLocation.lng]
       : [33.595, -7.618];
+
+  const routePath = buildCurvedPath(busLocation, pickupLocation);
 
   return (
     <section className="driver-map-panel overflow-hidden rounded-[26px] border border-line bg-white shadow-[var(--shadow-panel)]">
@@ -185,7 +84,10 @@ function DriverMapPanel({ busLocation, pickupLocation }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
           />
-          <DriverMapPanelInner busLocation={busLocation} pickupLocation={pickupLocation} />
+          <MapUpdater busLocation={busLocation} pickupLocation={pickupLocation} />
+          {routePath.length > 0 && <Polyline positions={routePath} pathOptions={ROUTE_STYLE} />}
+          {busLocation ? <Marker position={[busLocation.lat, busLocation.lng]} icon={busIcon} /> : null}
+          {pickupLocation ? <Marker position={[pickupLocation.lat, pickupLocation.lng]} icon={pickupIcon} /> : null}
         </MapContainer>
       </div>
     </section>
