@@ -34,6 +34,17 @@ function readCachedUser() {
   }
 }
 
+function clearClientAuthState() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("auth_user");
+
+  try {
+    sessionStorage.removeItem("admin_bootstrap_cache");
+  } catch {
+    // ignore storage cleanup failures
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readCachedUser());
   const [loading, setLoading] = useState(() => {
@@ -56,8 +67,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem("auth_user", JSON.stringify(nextUser));
       return nextUser;
     } catch {
-      localStorage.removeItem("token");
-      localStorage.removeItem("auth_user");
+      clearClientAuthState();
       setUser(null);
       return null;
     } finally {
@@ -95,8 +105,7 @@ export function AuthProvider({ children }) {
     } catch {
       // local cleanup still matters even if the API call fails
     } finally {
-      localStorage.removeItem("token");
-      localStorage.removeItem("auth_user");
+      clearClientAuthState();
       setUser(null);
       setLoading(false);
     }

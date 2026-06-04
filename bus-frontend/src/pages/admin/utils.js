@@ -1,5 +1,5 @@
 export function buildAdminNavigation(t, icons) {
-  const { HiHome, HiUsers, HiDatabase, HiTruck, HiUserGroup, HiClipboardDocumentList } = icons;
+  const { HiHome, HiUsers, HiDatabase, HiTruck, HiUserGroup, HiClipboardDocumentList, HiSparkles } = icons;
 
   return [{
     label: t("administration"),

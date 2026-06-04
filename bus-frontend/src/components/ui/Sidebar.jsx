@@ -1,5 +1,4 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { HiTruck } from "react-icons/hi";
 import { HiChevronDown } from "react-icons/hi2";
 import { useLanguage } from "../../i18n";
 
@@ -17,8 +16,8 @@ function Sidebar({ items, title, subtitle }) {
     <aside className="relative z-30 bg-sidebar/95 lg:w-[96px] lg:shrink-0 lg:border-r lg:border-line">
       <div className="app-scrollbar group/sidebar bg-sidebar/95 px-4 py-7 backdrop-blur-xl lg:sticky lg:left-0 lg:top-0 lg:h-screen lg:w-[96px] lg:overflow-x-hidden lg:overflow-y-auto lg:transition-[width,box-shadow] lg:duration-300 lg:ease-out lg:hover:w-[300px] lg:hover:shadow-[0_16px_40px_rgba(15,23,42,0.12)]">
         <div className="flex items-center gap-3 px-1">
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-line bg-accent-soft text-accent">
-            <HiTruck className="text-[22px]" />
+          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl border border-line bg-white shadow-[var(--shadow-soft)]">
+            <img src="/logo.png" alt="BusTracker logo" className="h-9 w-9 object-contain" />
           </div>
           <div className="hidden overflow-hidden transition-all duration-300 ease-out lg:block lg:w-0 lg:opacity-0 lg:group-hover/sidebar:w-[170px] lg:group-hover/sidebar:opacity-100">
             <p className="whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.28em] text-muted">

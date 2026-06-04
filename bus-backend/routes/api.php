@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\DriverController;
 use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\TripController;
@@ -13,6 +14,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/chat', [ChatController::class, 'sendMessage']);
 
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         Route::get('/bootstrap', [AdminController::class, 'bootstrap']);

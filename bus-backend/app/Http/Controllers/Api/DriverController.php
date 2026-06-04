@@ -10,6 +10,7 @@ use App\Models\Notification;
 use App\Models\Presence;
 use App\Models\Student;
 use App\Models\Trip;
+use App\Services\FirebaseService;
 use App\Services\NotificationBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -126,7 +127,7 @@ class DriverController extends Controller
         return response()->json(['message' => 'Trip started.']);
     }
 
-    public function updateStudentStatus(Request $request, Student $student, NotificationBroadcaster $broadcaster): JsonResponse
+    public function updateStudentStatus(Request $request, Student $student, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
     {
         $validated = $request->validate([
             'status' => ['required', Rule::in(['mounted', 'absent', 'in_bus'])],
@@ -160,6 +161,9 @@ class DriverController extends Controller
                 ]
             );
         }
+
+        // Realtime Firebase update
+        $firebase->updateStudentStatus((int) $student->id, $validated['status']);
 
         $statusLabels = ['mounted' => 'got on the bus', 'in_bus' => 'got on the bus', 'absent' => 'is absent today'];
         $statusLabel = $statusLabels[$validated['status']] ?? $validated['status'];

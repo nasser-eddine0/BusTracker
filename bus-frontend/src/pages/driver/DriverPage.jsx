@@ -109,7 +109,6 @@ function DriverPage() {
     } catch { /* ignore */ }
   }, []);
 
-  // Poll for new notifications every 15s during a trip (no WS server running)
   useEffect(() => {
     if (!tripStarted) return undefined;
     const pollNotifs = async () => {
@@ -120,7 +119,6 @@ function DriverPage() {
           const newOnes = freshNotifs.filter((n) => !currentIds.has(n.id));
           if (newOnes.length > 0) {
             newOnes.forEach(applyNotificationStatus);
-            // Schedule toasts OUTSIDE this updater to avoid StrictMode double-fire
             setTimeout(() => {
               newOnes.forEach((n) => {
                 if (n.read === false) toast(n.helper || n.title, { id: `notif-${n.id}` });
@@ -158,10 +156,8 @@ function DriverPage() {
   const absentCount = useMemo(() => routeStudents.filter((student) => student.status === "absent").length, [routeStudents]);
   const waitingCount = waitingStudents.length;
 
-  // ID-based target selection: driver clicks any waiting student
   const [currentTargetId, setCurrentTargetId] = useState(null);
 
-  // Auto-select first waiting student if no target is set or current target is no longer waiting
   useEffect(() => {
     if (!tripStarted) return;
     const currentStudentStillWaiting = waitingStudents.some((s) => s.id === currentTargetId);
@@ -184,7 +180,6 @@ function DriverPage() {
     setStatusStage("heading");
   }, [currentStudent, tripStarted]);
 
-  // Update statusStage based on real distance from backend ping
   useEffect(() => {
     if (distanceToTarget === null) {
       setStatusStage("heading");
@@ -199,7 +194,6 @@ function DriverPage() {
 
   const statusText = statusStage === "door" ? t("atDoor") : statusStage === "near" ? t("arrivingPickup") : t("headingNext");
 
-  // GPS ping every 5 seconds: sends location to backend for geofencing + updates Firebase
   useEffect(() => {
     if (!tripStarted || !activeTripId) return undefined;
     if (!("geolocation" in navigator)) return undefined;
@@ -213,7 +207,6 @@ function DriverPage() {
         async ({ coords }) => {
           if (!navigator.onLine || cancelled) return;
 
-          // 1. Ping the backend (geofencing + bus coordinates update)
           try {
             const pingResult = await pingDriverLocation(
               activeTripId,
@@ -228,7 +221,6 @@ function DriverPage() {
             // Backend ping failed; continue with Firebase fallback
           }
 
-          // 2. Also update Firebase for real-time parent map tracking
           try {
             await update(ref(db, `active_trips/${activeTripId}`), {
               live_location: {
@@ -238,9 +230,7 @@ function DriverPage() {
               },
               updated_at: new Date().toISOString(),
             });
-          } catch {
-            // Ignore transient realtime write failures
-          }
+          } catch { /* ignore */ }
         },
         () => {},
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
@@ -277,7 +267,10 @@ function DriverPage() {
   const handleStartTrip = async (type) => {
     if (!bus?.id) return;
 
+    setTripStarted(true);
+    setTripCompleted(false);
     setTripBusy(true);
+
     try {
       const data = await startDriverTrip(bus.id, { type });
       const nextTripId = data.tripId;
@@ -308,15 +301,12 @@ function DriverPage() {
             : null,
           live_attendance: nextLiveAttendance,
         });
-      } catch {
-        // Firebase write may fail due to permissions; trip still works via backend
-      }
+      } catch { /* ignore */ }
 
       setActiveTripId(nextTripId);
-      setTripStarted(true);
-      setTripCompleted(false);
       toast.success(t("tripStarted"));
     } catch (error) {
+      setTripStarted(false);
       toast.error(error?.response?.data?.message || t("saveError"));
     } finally {
       setTripBusy(false);
@@ -326,13 +316,21 @@ function DriverPage() {
   const handleStudentAction = async (status) => {
     if (!currentStudent || !bus?.id || tripBusy) return;
 
+    const studentIdStr = String(currentStudent.id);
+    const oldStatus = studentsMap[studentIdStr]?.status;
+
+    setStudentsMap((current) => ({
+      ...current,
+      [studentIdStr]: {
+        ...current[studentIdStr],
+        status,
+      },
+    }));
+    setCurrentTargetId(null);
+    setDistanceToTarget(null);
+
     setTripBusy(true);
     try {
-      const updatedAttendance = {
-        status,
-        updated_at: new Date().toISOString(),
-      };
-
       await updateDriverStudentStatus(currentStudent.id, {
         busId: bus.id,
         status,
@@ -340,26 +338,22 @@ function DriverPage() {
 
       if (activeTripId) {
         try {
-          await update(ref(db, `active_trips/${activeTripId}/live_attendance/${currentStudent.id}`), updatedAttendance);
-        } catch {
-          // Keep the backend as the source of truth when realtime writes are blocked.
-        }
+          await update(ref(db, `active_trips/${activeTripId}/live_attendance/${currentStudent.id}`), {
+            status,
+            updated_at: new Date().toISOString(),
+          });
+        } catch { /* ignore */ }
       }
-
-      setStudentsMap((current) => ({
-        ...current,
-        [String(currentStudent.id)]: {
-          ...current[String(currentStudent.id)],
-          status,
-        },
-      }));
-
-      // Clear the current target so the effect can auto-select the next waiting student.
-      setCurrentTargetId(null);
-      setDistanceToTarget(null);
 
       toast.success(["mounted", "in_bus"].includes(status) ? t("studentMounted") : t("studentAbsent"));
     } catch (error) {
+      setStudentsMap((current) => ({
+        ...current,
+        [studentIdStr]: {
+          ...current[studentIdStr],
+          status: oldStatus,
+        },
+      }));
       toast.error(error?.response?.data?.message || error?.message || t("saveError"));
     } finally {
       setTripBusy(false);
@@ -372,13 +366,11 @@ function DriverPage() {
     setTripBusy(true);
     try {
       const tripType = activeTripState?.type || "aller";
-      // Try Firebase first, fall back to local React state if permission denied
       let liveAttendance = {};
       try {
         const attendanceSnapshot = await get(ref(db, `active_trips/${activeTripId}/live_attendance`));
         liveAttendance = attendanceSnapshot.val() || {};
       } catch {
-        // Firebase read failed — use local state instead
         liveAttendance = activeTripState?.live_attendance || {};
       }
 
@@ -388,12 +380,8 @@ function DriverPage() {
         const normalizedStatus = normalizeStudentStatus(rawStatus);
 
         let finalStatus = normalizedStatus;
-        if (tripType === "aller" && normalizedStatus === "mounted") {
-          finalStatus = "dropped";
-        }
-        if (tripType === "retour" && normalizedStatus === "mounted") {
-          finalStatus = "dropped";
-        }
+        if (tripType === "aller" && normalizedStatus === "mounted") finalStatus = "dropped";
+        if (tripType === "retour" && normalizedStatus === "mounted") finalStatus = "dropped";
 
         return {
           student_id: Number(studentId),
@@ -404,15 +392,10 @@ function DriverPage() {
 
       await finalizeDriverTrip(activeTripId, {
         attendance,
-        final_location: busLive?.location
-          ? {
-              lat: busLive.location.lat,
-              lng: busLive.location.lng,
-            }
-          : null,
+        final_location: busLive?.location ? { lat: busLive.location.lat, lng: busLive.location.lng } : null,
       });
 
-      try { await remove(ref(db, `active_trips/${activeTripId}`)); } catch { /* Firebase cleanup optional */ }
+      try { await remove(ref(db, `active_trips/${activeTripId}`)); } catch { /* ignore */ }
       setActiveTripId(null);
       setTripCompleted(true);
       toast.success(t("dropCompleted"));
@@ -432,18 +415,7 @@ function DriverPage() {
   const renderView = () => {
     switch (activeView) {
       case "profile":
-        return (
-          <ProfileView
-            t={t}
-            user={user}
-            busLive={busLive}
-            routeStudents={routeStudents}
-            tripStarted={tripStarted}
-            tripCompleted={tripCompleted}
-            mountedCount={mountedCount}
-            absentCount={absentCount}
-          />
-        );
+        return <ProfileView t={t} user={user} busLive={busLive} routeStudents={routeStudents} tripStarted={tripStarted} tripCompleted={tripCompleted} mountedCount={mountedCount} absentCount={absentCount} />;
       case "notifications":
         return <NotificationsView t={t} driverEvents={driverEvents} onMarkRead={handleMarkDriverRead} />;
       case "map":
@@ -451,26 +423,12 @@ function DriverPage() {
       default:
         return (
           <TripView
-            t={t}
-            busLive={busLive}
-            routeStudents={routeStudents}
-            waitingStudents={waitingStudents}
-            waitingCount={waitingCount}
-            mountedCount={mountedCount}
-            absentCount={absentCount}
-            tripBusy={tripBusy}
-            tripStarted={tripStarted}
-            tripCompleted={tripCompleted}
-            currentStudent={currentStudent}
-            handleStartTrip={handleStartTrip}
-            handleDrop={handleDrop}
-            handleStudentAction={handleStudentAction}
-            handleSelectStudent={handleSelectStudent}
-            handleNudgeParent={handleNudgeParent}
-            distanceToTarget={distanceToTarget}
-            statusText={statusText}
-            statusStage={statusStage}
-            bus={bus}
+            t={t} busLive={busLive} routeStudents={routeStudents} waitingStudents={waitingStudents} waitingCount={waitingCount}
+            mountedCount={mountedCount} absentCount={absentCount} tripBusy={tripBusy} tripStarted={tripStarted}
+            tripCompleted={tripCompleted} currentStudent={currentStudent} handleStartTrip={handleStartTrip}
+            handleDrop={handleDrop} handleStudentAction={handleStudentAction} handleSelectStudent={handleSelectStudent}
+            handleNudgeParent={handleNudgeParent} distanceToTarget={distanceToTarget} statusText={statusText}
+            statusStage={statusStage} bus={bus}
           />
         );
     }
@@ -482,20 +440,14 @@ function DriverPage() {
         <Sidebar items={driverNavigation} subtitle={t("driver")} />
         <main className="min-w-0 flex-1 px-4 py-5 lg:px-8 lg:py-6">
           <DriverHeader
-            driverName={user?.name || t("driver")}
-            busName={busLive?.name || t("noBus")}
-            onLogout={handleLogout}
-            notifCount={unreadDriverCount}
-            onNotifClick={() => navigate("/driver/notifications")}
+            driverName={user?.name || t("driver")} busName={busLive?.name || t("noBus")}
+            onLogout={handleLogout} notifCount={unreadDriverCount} onNotifClick={() => navigate("/driver/notifications")}
           />
           <div className="mt-6">
             <AnimatePresence mode="wait">
               <MotionDiv
-                key={activeView}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.25 }}
+                key={activeView} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}
               >
                 {renderView()}
               </MotionDiv>

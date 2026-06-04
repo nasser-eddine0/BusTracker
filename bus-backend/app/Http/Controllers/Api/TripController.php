@@ -10,6 +10,7 @@ use App\Models\Notification;
 use App\Models\Presence;
 use App\Models\Student;
 use App\Models\Trip;
+use App\Services\FirebaseService;
 use App\Services\NotificationBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ use Illuminate\Validation\Rule;
 
 class TripController extends Controller
 {
-    public function start(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
+    public function start(Request $request, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
     {
         $validated = $request->validate([
             'busId' => ['required', 'integer', 'exists:buses,id'],
@@ -70,37 +71,70 @@ class TripController extends Controller
             return $trip;
         });
 
-        foreach ($bus->students as $student) {
-            $tripStartedMessage = $trip->type === 'retour'
-                ? "{$bus->bus_name} is returning from school."
-                : "{$bus->bus_name} has started the route to school.";
+        $notifications = [];
+        $now = now();
+        $tripStartedMessage = $trip->type === 'retour'
+            ? "{$bus->bus_name} is returning from school."
+            : "{$bus->bus_name} has started the route to school.";
 
-            $this->createParentNotification(
-                $student,
-                $bus,
-                $trip,
-                (int) $driver->id,
-                'trip_started',
-                'Trip started',
-                $tripStartedMessage,
-                $broadcaster,
-                [
-                    'tripType' => $trip->type,
-                ]
-            );
+        foreach ($bus->students as $student) {
+            if ($student->parent_id) {
+                $notifications[] = [
+                    'recipient_user_id' => $student->parent_id,
+                    'parent_id' => $student->parent_id,
+                    'student_id' => $student->id,
+                    'bus_id' => $bus->id,
+                    'trip_id' => $trip->id,
+                    'created_by_user_id' => $driver->id,
+                    'type' => 'trip_started',
+                    'title' => 'Trip started',
+                    'message' => $tripStartedMessage,
+                    'date_envoi' => $now,
+                    'payload' => json_encode([
+                        'studentName' => $student->full_name,
+                        'busName' => $bus->bus_name,
+                        'tripType' => $trip->type,
+                    ]),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
         }
 
-        $this->createAdminNotifications(
-            (int) $driver->id,
-            'trip_started',
-            'Trajet demarre',
-            "{$bus->bus_name} a commence sa tournee.",
-            [
-                'busName' => $bus->bus_name,
-                'driverName' => $driver->name,
+        $admins = Admin::query()->where('status', 'active')->get(['id']);
+        foreach ($admins as $admin) {
+            $notifications[] = [
+                'recipient_user_id' => $admin->id,
+                'created_by_user_id' => $driver->id,
+                'type' => 'trip_started',
+                'title' => 'Trajet demarre',
+                'message' => "{$bus->bus_name} a commence sa tournee.",
+                'date_envoi' => $now,
+                'payload' => json_encode([
+                    'busName' => $bus->bus_name,
+                    'driverName' => $driver->name,
+                ]),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if (!empty($notifications)) {
+            Notification::insert($notifications);
+        }
+
+        // Realtime Firebase update
+        $firebase->updateBusLocation((int) $bus->id, [
+            'trip_id' => (string) $trip->id,
+            'bus_id' => (string) $bus->id,
+            'bus_name' => $bus->bus_name,
+            'status' => 'in_progress',
+            'type' => $trip->type,
+            'live_location' => [
+                'lat' => (float) $bus->latitude_actuelle,
+                'lng' => (float) $bus->longitude_actuelle,
             ],
-            $broadcaster
-        );
+        ]);
 
         return response()->json([
             'message' => 'Trip started.',
@@ -115,7 +149,7 @@ class TripController extends Controller
         ], 201);
     }
 
-    public function finalize(Request $request, Trip $trip, NotificationBroadcaster $broadcaster): JsonResponse
+    public function finalize(Request $request, Trip $trip, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
     {
         $validated = $request->validate([
             'attendance' => ['required', 'array', 'min:1'],
@@ -188,48 +222,66 @@ class TripController extends Controller
             ]);
         });
 
+        $notifications = [];
+        $now = now();
+
         foreach ($trip->bus->students as $student) {
             $status = $attendanceRows->firstWhere('student_id', (int) $student->id)['status'] ?? null;
             if (!$status || !$student->parent_id) {
                 continue;
             }
 
-            if ($status === 'dropped') {
-                $message = $trip->type === 'retour'
-                    ? "{$student->full_name} has arrived home."
-                    : "{$student->full_name} has arrived at school.";
-            } else {
-                $message = "{$student->full_name} was finalized as {$status}.";
-            }
+            $message = ($status === 'dropped')
+                ? ($trip->type === 'retour' ? "{$student->full_name} has arrived home." : "{$student->full_name} has arrived at school.")
+                : "{$student->full_name} was finalized as {$status}.";
 
-            $this->createParentNotification(
-                $student,
-                $trip->bus,
-                $trip,
-                (int) $driver->id,
-                'trip_finalized',
-                'Trip finalized',
-                $message,
-                $broadcaster,
-                [
+            $notifications[] = [
+                'recipient_user_id' => $student->parent_id,
+                'parent_id' => $student->parent_id,
+                'student_id' => $student->id,
+                'bus_id' => $trip->bus_id,
+                'trip_id' => $trip->id,
+                'created_by_user_id' => $driver->id,
+                'type' => 'trip_finalized',
+                'title' => 'Trip finalized',
+                'message' => $message,
+                'date_envoi' => $now,
+                'payload' => json_encode([
+                    'studentName' => $student->full_name,
+                    'busName' => $trip->bus->bus_name,
                     'tripType' => $trip->type,
                     'studentStatus' => $status,
-                ]
-            );
+                ]),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
         }
 
-        $this->createAdminNotifications(
-            (int) $driver->id,
-            'trip_completed',
-            'Trajet termine',
-            "{$trip->bus->bus_name} a termine la tournee.",
-            [
-                'busName' => $trip->bus->bus_name,
-                'driverName' => $driver->name,
-                'tripId' => (string) $trip->id,
-            ],
-            $broadcaster
-        );
+        $admins = Admin::query()->where('status', 'active')->get(['id']);
+        foreach ($admins as $admin) {
+            $notifications[] = [
+                'recipient_user_id' => $admin->id,
+                'created_by_user_id' => $driver->id,
+                'type' => 'trip_completed',
+                'title' => 'Trajet termine',
+                'message' => "{$trip->bus->bus_name} a termine la tournee.",
+                'date_envoi' => $now,
+                'payload' => json_encode([
+                    'busName' => $trip->bus->bus_name,
+                    'driverName' => $driver->name,
+                    'tripId' => (string) $trip->id,
+                ]),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if (!empty($notifications)) {
+            Notification::insert($notifications);
+        }
+
+        // Realtime Firebase update: Remove active trip
+        $firebase->completeTrip((int) $trip->bus_id);
 
         return response()->json([
             'message' => 'Trip finalized.',
@@ -238,7 +290,7 @@ class TripController extends Controller
         ]);
     }
 
-    public function pingLocation(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
+    public function pingLocation(Request $request, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
     {
         $validated = $request->validate([
             'tripId' => ['required', 'integer', 'exists:trips,id'],
@@ -259,6 +311,14 @@ class TripController extends Controller
         $trip->bus->update([
             'latitude_actuelle' => $validated['latitude'],
             'longitude_actuelle' => $validated['longitude'],
+        ]);
+
+        // Realtime Firebase update: Only update location to minimize payload
+        $firebase->updateBusLocation((int) $trip->bus_id, [
+            'live_location' => [
+                'lat' => (float) $validated['latitude'],
+                'lng' => (float) $validated['longitude'],
+            ],
         ]);
 
         $alerts = [];

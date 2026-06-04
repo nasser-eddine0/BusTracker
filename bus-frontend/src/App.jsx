@@ -6,9 +6,10 @@ import Driver from "./pages/Driver";
 import Parent from "./pages/Parent";
 import Admin from "./pages/Admin";
 import SignIn from "./pages/SignIn";
-import SignUp from "./pages/SignUp";
 import RoleSelect from "./pages/RoleSelect";
+import ChatAssistant from "./pages/ChatAssistant";
 import ProtectedRoute from "./components/ProtectedRoute";
+import FloatingChatbot from "./components/FloatingChatbot";
 
 const pageVariants = {
   initial: { opacity: 0, y: 16, scale: 0.99 },
@@ -70,11 +71,14 @@ function AnimatedRoutes() {
             </PageTransition>
           }
         />
+        <Route path="/signup" element={<Navigate to="/signin" replace />} />
         <Route
-          path="/signup"
+          path="/chat"
           element={
             <PageTransition>
-              <SignUp />
+              <ProtectedRoute allowedRoles={["admin", "driver", "parent"]}>
+                <ChatAssistant />
+              </ProtectedRoute>
             </PageTransition>
           }
         />
@@ -120,6 +124,7 @@ function App() {
       <LanguageProvider>
       <BrowserRouter>
         <AnimatedRoutes />
+        <FloatingChatbot />
       </BrowserRouter>
       <Toaster
         position="top-center"

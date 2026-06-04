@@ -47,8 +47,8 @@ class AdminController extends Controller
             ->orderBy('full_name')
             ->get();
 
-        $drivers = $users->filter(fn (User $user) => $user->role === 'driver')->values();
-        $parents = $users->filter(fn (User $user) => $user->role === 'parent')->values();
+        $drivers = $users->where('role', 'driver');
+        $parents = $users->where('role', 'parent');
 
         return response()->json([
             'users' => $users->mapWithKeys(fn (User $user) => [(string) $user->id => $this->serializeUser($user)])->all(),
