@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
 import { HiChartBar, HiTruck, HiUserGroup } from "react-icons/hi";
 import { useLanguage, LangSwitcher } from "../i18n";
+import { motion } from "framer-motion";
 
 function RoleSelect() {
   const { t } = useLanguage();
@@ -70,10 +70,7 @@ function RoleSelect() {
               })}
             </div>
 
-            <p className="text-sm text-muted">
-              {t("noAccount")}{" "}
-              <Link to="/signup" className="font-semibold text-accent">{t("createAccount")}</Link>
-            </p>
+
           </div>
         </div>
       </div>
@@ -82,3 +79,4 @@ function RoleSelect() {
 }
 
 export default RoleSelect;
+

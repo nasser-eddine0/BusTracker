@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { HiClock, HiFilter, HiIdentification, HiOutlineTable, HiSearch } from "react-icons/hi";
 import PanelCard from "../../../components/ui/PanelCard";
 import SectionHeader from "../../../components/ui/SectionHeader";
@@ -206,20 +206,15 @@ function ArchiveView({ archiveTrips, notifications = [] }) {
     });
   }, [archiveTrips, busFilter, dateEnd, dateStart, driverFilter, studentSearch, typeFilter]);
 
-  useEffect(() => {
-    if (!filteredTrips.length) {
-      setSelectedTripId(null);
-      return;
-    }
+  const effectiveSelectedTripId = useMemo(
+    () => filteredTrips.find((trip) => trip.id === selectedTripId)?.id || filteredTrips[0]?.id || null,
+    [filteredTrips, selectedTripId]
+  );
 
-    if (!selectedTripId || !filteredTrips.some((trip) => trip.id === selectedTripId)) {
-      setSelectedTripId(filteredTrips[0].id);
-      setDetailMode("trip");
-      setEntityDetail(null);
-    }
-  }, [filteredTrips, selectedTripId]);
-
-  const selectedTrip = useMemo(() => filteredTrips.find((trip) => trip.id === selectedTripId) || filteredTrips[0] || null, [filteredTrips, selectedTripId]);
+  const selectedTrip = useMemo(
+    () => filteredTrips.find((trip) => trip.id === effectiveSelectedTripId) || null,
+    [effectiveSelectedTripId, filteredTrips]
+  );
 
   const matchedStudents = useMemo(() => {
     const normalizedSearch = studentSearch.trim().toLowerCase();

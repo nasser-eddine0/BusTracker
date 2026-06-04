@@ -357,8 +357,8 @@ class TripController extends Controller
             $trip,
             (int) $driver->id,
             'nudge',
-            'المرجو الإسراع',
-            "الحافلة في انتظار {$student->full_name}، المرجو الإسراع!",
+            'Veuillez vous preparer',
+            "Le bus attend {$student->full_name}. Veuillez vous preparer rapidement.",
             $broadcaster
         );
 
@@ -366,7 +366,7 @@ class TripController extends Controller
     }
 
     /**
-     * Haversine formula — returns distance in meters between two GPS coordinates.
+     * Haversine formula returns distance in meters between two GPS coordinates.
      */
     private function haversineMeters(float $lat1, float $lng1, float $lat2, float $lng2): float
     {

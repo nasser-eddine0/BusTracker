@@ -6,7 +6,7 @@ import { HiMapPin, HiUser } from "react-icons/hi2";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { declareParentAbsence, declareParentReady, fetchParentDashboard, fetchParentNotifications, markParentNotificationsRead } from "../../api/parent";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContextObject";
 import { useActiveTripById, useRealtime, useTripForBus } from "../../context/useRealtime";
 import { db } from "../../firebase";
 import useNotificationSocket from "../../hooks/useNotificationSocket";

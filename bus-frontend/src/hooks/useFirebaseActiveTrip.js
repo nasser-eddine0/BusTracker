@@ -4,19 +4,19 @@ import { db } from "../firebase";
 
 export default function useFirebaseActiveTrip(tripId) {
   const [activeTrip, setActiveTrip] = useState(null);
+  const effectiveTripId = tripId || null;
 
   useEffect(() => {
-    if (!tripId) {
-      setActiveTrip(null);
+    if (!effectiveTripId) {
       return undefined;
     }
 
-    const unsubscribe = onValue(ref(db, `active_trips/${tripId}`), (snapshot) => {
+    const unsubscribe = onValue(ref(db, `active_trips/${effectiveTripId}`), (snapshot) => {
       setActiveTrip(snapshot.val() || null);
     });
 
     return () => unsubscribe();
-  }, [tripId]);
+  }, [effectiveTripId]);
 
-  return activeTrip;
+  return effectiveTripId ? activeTrip : null;
 }

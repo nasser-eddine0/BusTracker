@@ -1,4 +1,4 @@
-import { HiLocationMarker, HiTruck, HiUserGroup } from "react-icons/hi";
+﻿import { HiLocationMarker, HiTruck, HiUserGroup } from "react-icons/hi";
 import PanelCard from "../../../components/ui/PanelCard";
 import AdminGlobalMap from "../components/AdminGlobalMap";
 
@@ -16,7 +16,7 @@ function LiveAdminView({ t, liveTrips, liveBuses }) {
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-extrabold text-main">{t("activeTripsShort")}</h3>
             <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent">
-              {liveTrips.length} en direct
+              {liveTrips.length} {t("liveCountSuffix")}
             </span>
           </div>
           <div className="space-y-3">
@@ -26,7 +26,7 @@ function LiveAdminView({ t, liveTrips, liveBuses }) {
                   <div>
                     <p className="text-base font-extrabold text-main">{trip.busName}</p>
                     <p className="mt-1 text-sm text-muted">
-                      {trip.type === "retour" ? "Retour" : "Aller"} • {trip.routeName || "Route active"}
+                      {trip.type === "retour" ? t("returnTrip") : t("outboundTrip")} - {trip.routeName || t("activeRoute")}
                     </p>
                   </div>
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
@@ -36,7 +36,7 @@ function LiveAdminView({ t, liveTrips, liveBuses }) {
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-[18px] bg-white px-3 py-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">{t("driverLabel")}</p>
-                    <p className="mt-1 text-sm font-semibold text-main">{trip.driverName || "Assigné"}</p>
+                    <p className="mt-1 text-sm font-semibold text-main">{trip.driverName || t("assigned")}</p>
                   </div>
                   <div className="rounded-[18px] bg-white px-3 py-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">{t("studentsTrackedShort")}</p>
@@ -66,7 +66,7 @@ function LiveAdminView({ t, liveTrips, liveBuses }) {
                 <HiTruck className="text-xl" />
               </div>
               <div>
-                <p className="text-sm font-bold text-main">{mappedBuses.length} bus géolocalisés</p>
+                <p className="text-sm font-bold text-main">{mappedBuses.length} {t("geolocatedBuses")}</p>
                 <p className="text-xs text-muted">{t("firebaseLiveStream")}</p>
               </div>
             </div>

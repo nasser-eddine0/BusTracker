@@ -1,18 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
-
-const AuthContext = createContext({
-  user: null,
-  profile: null,
-  loading: true,
-  role: null,
-  busId: null,
-  studentId: null,
-  signIn: async () => {},
-  signUp: async () => {},
-  signOut: async () => {},
-  refreshProfile: async () => {},
-});
+import { AuthContext } from "./AuthContextObject";
 
 function normalizeUser(user) {
   if (!user) return null;
@@ -120,6 +108,3 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}

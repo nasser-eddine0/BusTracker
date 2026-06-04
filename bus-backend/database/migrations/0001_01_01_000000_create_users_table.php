@@ -18,7 +18,7 @@ return new class extends Migration
         $table->timestamp('email_verified_at')->nullable();
         $table->string('password');
         
-        // الدور الافتراضي هو أب
+        // Default public account role.
         $table->string('role')->default('parent'); // admin, driver, parent
         $table->string('phone')->nullable();
         $table->string('status')->default('active');
@@ -28,7 +28,7 @@ return new class extends Migration
         $table->timestamps();
     });
 
-    // جداول النظام (ضرورية لـ Laravel)
+    // Framework support tables.
     Schema::create('password_reset_tokens', function (Blueprint $table) {
         $table->string('email')->primary();
         $table->string('token');
@@ -50,7 +50,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
+    // Framework support tables.
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
     }

@@ -75,7 +75,7 @@ function AdminGlobalMap({ buses, t, height = 360 }) {
                   <p>{bus.routeName || t("routeUndefined")}</p>
                   <p>{t("driverLabel")}: {bus.driverName || t("notAssigned")}</p>
                   <p>
-                    Speed: {bus.location?.speed != null ? `${Math.round(bus.location.speed)} km/h` : "N/A"}
+                    {t("speed")}: {bus.location?.speed != null ? `${Math.round(bus.location.speed)} km/h` : t("notAvailable")}
                   </p>
                 </div>
               </Popup>

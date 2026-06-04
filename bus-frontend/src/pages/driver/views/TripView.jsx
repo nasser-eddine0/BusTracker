@@ -16,7 +16,6 @@ function TripView({
   t,
   busLive,
   routeStudents,
-  waitingStudents,
   waitingCount,
   mountedCount,
   absentCount,
@@ -31,7 +30,6 @@ function TripView({
   handleNudgeParent,
   distanceToTarget,
   statusText,
-  statusStage,
   bus,
 }) {
   // showMap toggles between student list view and map view for the current target

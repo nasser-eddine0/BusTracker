@@ -9,23 +9,23 @@ import { db } from "../firebase";
  */
 export default function useFirebaseTripForBus(busId) {
   const [tripId, setTripId] = useState(null);
+  const effectiveBusId = busId ? String(busId) : null;
 
   useEffect(() => {
-    if (!busId) {
-      setTripId(null);
+    if (!effectiveBusId) {
       return undefined;
     }
 
     const unsubscribe = onValue(ref(db, "active_trips"), (snapshot) => {
       const activeTrips = snapshot.val() || {};
       const matchingEntry = Object.entries(activeTrips).find(
-        ([, trip]) => String(trip?.bus_id) === String(busId) && trip?.status === "in_progress"
+        ([, trip]) => String(trip?.bus_id) === effectiveBusId && trip?.status === "in_progress"
       );
       setTripId(matchingEntry ? String(matchingEntry[0]) : null);
     });
 
     return () => unsubscribe();
-  }, [busId]);
+  }, [effectiveBusId]);
 
-  return tripId;
+  return effectiveBusId ? tripId : null;
 }

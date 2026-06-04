@@ -18,7 +18,7 @@ class AuthController extends Controller
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'phone' => ['nullable', 'string', 'max:40'],
-            'role' => ['nullable', Rule::in(['parent', 'driver', 'admin'])],
+            'role' => ['nullable', Rule::in(['parent'])],
         ]);
 
         $user = User::create([
@@ -26,7 +26,7 @@ class AuthController extends Controller
             'email' => strtolower($validated['email']),
             'password' => $validated['password'],
             'phone' => $validated['phone'] ?? null,
-            'role' => $validated['role'] ?? 'parent',
+            'role' => 'parent',
             'status' => 'active',
         ]);
 

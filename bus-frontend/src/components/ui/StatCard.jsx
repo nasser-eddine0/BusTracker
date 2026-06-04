@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 const MotionArticle = motion.article;
 
 function StatCard({ icon: Icon, title, value, delta, positive = true, helper }) {
+  const DisplayIcon = Icon;
   return (
     <MotionArticle
       initial={{ opacity: 0, y: 12 }}
@@ -30,7 +31,7 @@ function StatCard({ icon: Icon, title, value, delta, positive = true, helper }) 
       </div>
 
       <div className="grid h-[60px] w-[60px] shrink-0 place-items-center rounded-[22px] bg-accent text-slate-950 shadow-[var(--shadow-accent)] md:h-16 md:w-16">
-        <Icon className="text-[1.4rem]" />
+        <DisplayIcon className="text-[1.4rem]" />
       </div>
     </MotionArticle>
   );

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import ActionButton from "../components/ui/ActionButton";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContextObject";
 import { useLanguage, LangSwitcher } from "../i18n";
 
 function SignUp() {

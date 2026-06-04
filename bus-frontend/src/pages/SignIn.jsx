@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { HiChartBar, HiTruck, HiUserGroup } from "react-icons/hi";
 import ActionButton from "../components/ui/ActionButton";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContextObject";
 import { useLanguage, LangSwitcher } from "../i18n";
 
 function SignIn() {
@@ -97,7 +97,6 @@ function SignIn() {
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <ActionButton type="submit" size="lg" disabled={submitting}>{submitting ? t("signingIn") : t("loginBtn")}</ActionButton>
-              <Link to="/signup" className="text-sm font-semibold text-accent">{t("createAccount")}</Link>
             </div>
           </form>
         </div>

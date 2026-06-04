@@ -8,6 +8,7 @@ import {
   HiRefresh,
 } from "react-icons/hi";
 import { parseImportHeaders, finalizeImport } from "../../../api/admin";
+import { useLanguage } from "../../../i18n";
 
 // The DB fields that the admin needs to map
 const DB_FIELDS = [
@@ -21,6 +22,7 @@ const DB_FIELDS = [
 ];
 
 export default function ImportStudentsTab({ onRefresh }) {
+  const { t } = useLanguage();
   // Phase: "upload" | "mapping" | "processing" | "done"
   const [phase, setPhase] = useState("upload");
   const [isUploading, setIsUploading] = useState(false);
@@ -192,9 +194,9 @@ export default function ImportStudentsTab({ onRefresh }) {
         <div className="rounded-full bg-[#71d9cd]/20 p-4">
           <HiCheck className="text-4xl text-[#71d9cd]" />
         </div>
-        <h3 className="mt-4 text-lg font-bold text-white">Import Complete!</h3>
+        <h3 className="mt-4 text-lg font-bold text-white">{t("importComplete")}</h3>
         <p className="mt-2 text-sm text-gray-400">
-          Students and parents have been registered successfully.
+          {t("studentsParentsRegistered")}
         </p>
         <button
           type="button"
@@ -202,7 +204,7 @@ export default function ImportStudentsTab({ onRefresh }) {
           className="mt-5 flex items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-5 py-2.5 text-sm font-bold text-white transition hover:border-[#71d9cd]/50 hover:bg-white/10"
         >
           <HiRefresh className="text-base" />
-          Import Another File
+          {t("importAnotherFile")}
         </button>
       </div>
     );

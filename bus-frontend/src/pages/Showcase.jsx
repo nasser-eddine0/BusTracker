@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import {
   HiBell,
   HiChartBar,
@@ -75,10 +75,12 @@ function ShowcaseSidebarSection({ title, children }) {
 }
 
 function ShowcaseSidebarItem({ icon: Icon, label, active }) {
+  const DisplayIcon = Icon;
+
   return (
     <button className={active ? "showcase-sidebar-item active" : "showcase-sidebar-item"}>
       <span className="showcase-sidebar-item-icon">
-        <Icon />
+        <DisplayIcon />
       </span>
       <span>{label}</span>
     </button>
@@ -113,8 +115,10 @@ function ShowcaseTopbar() {
 }
 
 function ShowcaseStatCard({ icon: Icon, title, value, delta, positive = true }) {
+  const DisplayIcon = Icon;
+
   return (
-    <motion.article variants={page} className="showcase-stat-card">
+    <Motion.article variants={page} className="showcase-stat-card">
       <div>
         <p>{title}</p>
         <div className="showcase-stat-row">
@@ -123,15 +127,15 @@ function ShowcaseStatCard({ icon: Icon, title, value, delta, positive = true }) 
         </div>
       </div>
       <div className="showcase-stat-icon">
-        <Icon />
+        <DisplayIcon />
       </div>
-    </motion.article>
+    </Motion.article>
   );
 }
 
 function ShowcaseFeatureCard({ title, description, children, large = false, image = false }) {
   return (
-    <motion.article
+    <Motion.article
       variants={page}
       className={`showcase-panel showcase-feature-card ${large ? "large" : ""} ${image ? "image" : ""}`}
     >
@@ -140,7 +144,7 @@ function ShowcaseFeatureCard({ title, description, children, large = false, imag
         <h3>{description}</h3>
       </div>
       {children}
-    </motion.article>
+    </Motion.article>
   );
 }
 
@@ -229,7 +233,7 @@ function AdminPreview() {
       }
       topbar={<ShowcaseTopbar />}
     >
-      <motion.div initial="hidden" animate="show" variants={stagger} className="showcase-stack">
+      <Motion.div initial="hidden" animate="show" variants={stagger} className="showcase-stack">
         <div className="showcase-grid showcase-grid-stats">
           <ShowcaseStatCard icon={HiWallet} title="Today's Trips" value="53" delta="+12%" />
           <ShowcaseStatCard icon={HiUsers} title="Active Parents" value="2300" delta="+5%" />
@@ -269,7 +273,7 @@ function AdminPreview() {
         </div>
 
         <div className="showcase-grid showcase-grid-charts">
-          <motion.article variants={page} className="showcase-panel">
+          <Motion.article variants={page} className="showcase-panel">
             <ChartMock bars />
             <div className="showcase-chart-copy">
               <h3>Active Users</h3>
@@ -283,9 +287,9 @@ function AdminPreview() {
               <MiniMetric label="Sales" value="542" accent="amber" />
               <MiniMetric label="Items" value="18" accent="mint" />
             </div>
-          </motion.article>
+          </Motion.article>
 
-          <motion.article variants={page} className="showcase-panel">
+          <Motion.article variants={page} className="showcase-panel">
             <div className="showcase-chart-head">
               <div>
                 <h3>Transport Overview</h3>
@@ -298,9 +302,9 @@ function AdminPreview() {
               </div>
             </div>
             <ChartMock />
-          </motion.article>
+          </Motion.article>
         </div>
-      </motion.div>
+      </Motion.div>
     </ShowcaseShell>
   );
 }
@@ -308,8 +312,8 @@ function AdminPreview() {
 function DriverPreview() {
   return (
     <div className="showcase-mobile-page">
-      <motion.div initial="hidden" animate="show" variants={stagger} className="showcase-stack showcase-width">
-        <motion.section variants={page} className="showcase-panel showcase-driver-banner">
+      <Motion.div initial="hidden" animate="show" variants={stagger} className="showcase-stack showcase-width">
+        <Motion.section variants={page} className="showcase-panel showcase-driver-banner">
           <div>
             <p>Active Drive Mode</p>
             <h1>Morning Route · Bus 04</h1>
@@ -322,10 +326,10 @@ function DriverPreview() {
             <div className="showcase-status-chip success">GPS tracking active</div>
             <button>End Trip</button>
           </div>
-        </motion.section>
+        </Motion.section>
 
         <div className="showcase-grid showcase-grid-driver">
-          <motion.section variants={page} className="showcase-panel showcase-driver-main">
+          <Motion.section variants={page} className="showcase-panel showcase-driver-main">
             <div className="showcase-status-chip danger">No absence declared for this stop</div>
             <p>Next student</p>
             <h2>Youssef El Amrani</h2>
@@ -349,31 +353,31 @@ function DriverPreview() {
                 <span>Skip</span>
               </button>
             </div>
-          </motion.section>
+          </Motion.section>
 
           <div className="showcase-stack">
-            <motion.section variants={page} className="showcase-panel">
+            <Motion.section variants={page} className="showcase-panel">
               <div className="showcase-small-head">
                 <h3>Route Snapshot</h3>
                 <HiLocationMarker />
               </div>
               <MapCard />
-            </motion.section>
+            </Motion.section>
 
             <div className="showcase-grid showcase-grid-double">
-              <motion.section variants={page} className="showcase-panel showcase-count-card">
+              <Motion.section variants={page} className="showcase-panel showcase-count-card">
                 <p>Students on board</p>
                 <h3>12/30</h3>
-              </motion.section>
-              <motion.section variants={page} className="showcase-panel showcase-count-card">
+              </Motion.section>
+              <Motion.section variants={page} className="showcase-panel showcase-count-card">
                 <p>Current speed</p>
                 <h3>42</h3>
                 <span>km/h</span>
-              </motion.section>
+              </Motion.section>
             </div>
           </div>
         </div>
-      </motion.div>
+      </Motion.div>
     </div>
   );
 }
@@ -381,8 +385,8 @@ function DriverPreview() {
 function ParentPreview() {
   return (
     <div className="showcase-mobile-page">
-      <motion.div initial="hidden" animate="show" variants={stagger} className="showcase-stack showcase-width">
-        <motion.section variants={page} className="showcase-panel showcase-parent-hero">
+      <Motion.div initial="hidden" animate="show" variants={stagger} className="showcase-stack showcase-width">
+        <Motion.section variants={page} className="showcase-panel showcase-parent-hero">
           <div className="showcase-parent-layout">
             <div>
               <div className="showcase-status-chip warning">Bus is on the way</div>
@@ -420,10 +424,10 @@ function ParentPreview() {
               </div>
             </div>
           </div>
-        </motion.section>
+        </Motion.section>
 
         <div className="showcase-grid showcase-grid-parent">
-          <motion.section variants={page} className="showcase-panel">
+          <Motion.section variants={page} className="showcase-panel">
             <div className="showcase-small-head">
               <div>
                 <h3>Private Live Map</h3>
@@ -432,9 +436,9 @@ function ParentPreview() {
               <HiShieldCheck />
             </div>
             <MapCard />
-          </motion.section>
+          </Motion.section>
 
-          <motion.section variants={page} className="showcase-panel">
+          <Motion.section variants={page} className="showcase-panel">
             <h3>Smart Notifications</h3>
             <div className="showcase-stack showcase-notification-list">
               {[
@@ -442,21 +446,25 @@ function ParentPreview() {
                 [HiLocationMarker, "The bus is outside. Please open the door.", "Arrival trigger"],
                 [FiCheckCircle, "Your child boarded safely at 07:30.", "Safety confirmation"],
                 [HiBolt, "Route delayed by traffic near the main avenue.", "Live traffic event"],
-              ].map(([Icon, title, helper]) => (
-                <div key={title} className="showcase-notification-card">
-                  <div className="showcase-notification-icon">
-                    <Icon />
+              ].map(([NotificationIcon, title, helper]) => {
+                const DisplayIcon = NotificationIcon;
+
+                return (
+                  <div key={title} className="showcase-notification-card">
+                    <div className="showcase-notification-icon">
+                      <DisplayIcon />
+                    </div>
+                    <div>
+                      <strong>{title}</strong>
+                      <p>{helper}</p>
+                    </div>
                   </div>
-                  <div>
-                    <strong>{title}</strong>
-                    <p>{helper}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          </motion.section>
+          </Motion.section>
         </div>
-      </motion.div>
+      </Motion.div>
     </div>
   );
 }

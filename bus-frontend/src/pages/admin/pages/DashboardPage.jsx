@@ -9,6 +9,11 @@ import AdminGlobalMap from "../components/AdminGlobalMap";
 
 function DashboardPage({ buses, students, drivers, parents, admins, summary }) {
   const { t } = useLanguage();
+  const tr = (key, replacements = {}) =>
+    Object.entries(replacements).reduce(
+      (text, [name, value]) => text.replaceAll(`{{${name}}}`, value),
+      t(key)
+    );
   const totalStudents = students.length;
   const activeBuses = buses.filter((bus) => bus.location).length;
   const onboardStudents = students.filter((student) => ["mounted", "entered"].includes(student.status)).length;
@@ -35,8 +40,8 @@ function DashboardPage({ buses, students, drivers, parents, admins, summary }) {
     <div className="space-y-6">
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
         <StatCard icon={HiUsers} title={t("totalStudents")} value={totalStudents} />
-        <StatCard icon={HiTruck} title="Fleet Online" value={activeBuses} helper={`${activeBuses} live buses from Firebase`} />
-        <StatCard icon={HiClipboardDocumentList} title="Today's Trips" value={todayTrips} helper="Pulled from Laravel history" />
+        <StatCard icon={HiTruck} title={t("fleetOnline")} value={activeBuses} helper={tr("liveBusesFromFirebase", { count: activeBuses })} />
+        <StatCard icon={HiClipboardDocumentList} title={t("todaysTrips")} value={todayTrips} helper={t("pulledFromHistory")} />
         <StatCard icon={HiBellAlert} title={t("absent")} value={absentStudents} positive={false} />
         <StatCard icon={HiUserGroup} title={t("dropped")} value={droppedStudents} />
       </div>
@@ -72,7 +77,7 @@ function DashboardPage({ buses, students, drivers, parents, admins, summary }) {
                   {t("driverLabel")}: {bus.driverName || t("notAssigned")} - {students.filter((student) => student.busId === bus.id).length}/{bus.capacity} {t("seats")}
                 </p>
                 <p className="mt-1 text-xs text-muted">
-                  Speed: {bus.location?.speed != null ? `${Math.round(bus.location.speed)} km/h` : "N/A"}
+                  {t("speed")}: {bus.location?.speed != null ? `${Math.round(bus.location.speed)} km/h` : t("notAvailable")}
                 </p>
               </div>
             ))}

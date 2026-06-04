@@ -2,10 +2,10 @@ import { getApp, getApps, initializeApp } from "firebase/app";
 import { getDatabase, goOffline, goOnline } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCITDWaNEthPPPwyE5h5mYyyxtpFIZNGvo",
-  authDomain: "bustracker-5e6c4.firebaseapp.com",
-  databaseURL: "https://bustracker-5e6c4-default-rtdb.firebaseio.com",
-  projectId: "bustracker-5e6c4",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCITDWaNEthPPPwyE5h5mYyyxtpFIZNGvo",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "bustracker-5e6c4.firebaseapp.com",
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://bustracker-5e6c4-default-rtdb.firebaseio.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "bustracker-5e6c4",
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);

@@ -77,7 +77,7 @@ function AssignmentsPage({ buses, students, onRefresh }) {
             <HiMagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 text-muted text-lg pointer-events-none" />
             <input
               className="app-input h-11 w-full pl-11"
-              placeholder={t("searchPlaceholder") || "Search by name or parent..."}
+              placeholder={t("searchPlaceholder")}
               value={searchName}
               onChange={(e) => setSearchName(e.target.value)}
             />
@@ -86,7 +86,7 @@ function AssignmentsPage({ buses, students, onRefresh }) {
             <HiMapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-muted text-lg pointer-events-none" />
             <input
               className="app-input h-11 w-full pl-11"
-              placeholder="Search by street or address..."
+              placeholder={t("searchByAddress")}
               value={searchAddress}
               onChange={(e) => setSearchAddress(e.target.value)}
             />

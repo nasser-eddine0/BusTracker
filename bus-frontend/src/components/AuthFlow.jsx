@@ -1,24 +1,24 @@
 import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 
 const roles = [
   {
     id: "parent",
     title: "Parent",
-    subtitle: "Suivre votre enfant et recevoir des mises à jour",
-    icon: "👨‍👩‍👧",
+    subtitle: "Suivre votre enfant et recevoir des mises a jour",
+    icon: "P",
   },
   {
     id: "admin",
     title: "Administrateur",
-    subtitle: "Gérer les bus, les utilisateurs et les trajets",
-    icon: "🏫",
+    subtitle: "Gerer les bus, les utilisateurs et les trajets",
+    icon: "A",
   },
   {
     id: "driver",
     title: "Chauffeur",
-    subtitle: "Démarrer le suivi et gérer les élèves",
-    icon: "🚌",
+    subtitle: "Demarrer le suivi et gerer les eleves",
+    icon: "C",
   },
 ];
 
@@ -66,7 +66,7 @@ function AuthFlow() {
       <SoftBackground />
 
       <div style={styles.centerWrap}>
-        <motion.div
+        <Motion.div
           layout
           transition={spring}
           style={{
@@ -82,7 +82,7 @@ function AuthFlow() {
         >
           <AnimatePresence mode="wait">
             {step === "welcome" && (
-              <motion.div
+              <Motion.div
                 key="welcome"
                 layout
                 initial={{ opacity: 0, y: 22, scale: 0.97 }}
@@ -91,34 +91,34 @@ function AuthFlow() {
                 transition={smooth}
                 style={styles.panel}
               >
-                <motion.div
+                <Motion.div
                   initial={{ opacity: 0, scale: 0.8, rotate: -8 }}
                   animate={{ opacity: 1, scale: 1, rotate: 0 }}
                   transition={{ ...smooth, delay: 0.08 }}
                   style={styles.heroIcon}
                 >
                   📍
-                </motion.div>
+                </Motion.div>
 
-                <motion.p
+                <Motion.p
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...smooth, delay: 0.12 }}
                   style={styles.kicker}
                 >
                   Transport Scolaire Intelligent
-                </motion.p>
+                </Motion.p>
 
-                <motion.h1
+                <Motion.h1
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...smooth, delay: 0.16 }}
                   style={styles.welcomeTitle}
                 >
                   Bienvenue
-                </motion.h1>
+                </Motion.h1>
 
-                <motion.p
+                <Motion.p
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...smooth, delay: 0.2 }}
@@ -126,9 +126,9 @@ function AuthFlow() {
                 >
                   Une expérience fluide et sécurisée de suivi de bus scolaire
                   pour les parents, les chauffeurs et le personnel de l'école.
-                </motion.p>
+                </Motion.p>
 
-                <motion.button
+                <Motion.button
                   whileHover={{
                     y: -2,
                     scale: 1.015,
@@ -141,21 +141,21 @@ function AuthFlow() {
                   className="glow-anim"
                 >
                   Commencer
-                </motion.button>
+                </Motion.button>
 
-                <motion.button
+                <Motion.button
                   whileHover={{ opacity: 1 }}
                   transition={micro}
                   onClick={handleBackToWelcome}
                   style={styles.hiddenGhost}
                 >
                   .
-                </motion.button>
-              </motion.div>
+                </Motion.button>
+              </Motion.div>
             )}
 
             {step === "roles" && (
-              <motion.div
+              <Motion.div
                 key="roles"
                 layout
                 initial={{ opacity: 0, scale: 0.985 }}
@@ -164,7 +164,7 @@ function AuthFlow() {
                 transition={smooth}
                 style={styles.rolesStage}
               >
-                <motion.div
+                <Motion.div
                   layout
                   initial={{ opacity: 0, y: -12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -178,11 +178,11 @@ function AuthFlow() {
                     Sélectionnez votre rôle pour accéder à l'interface
                     adaptée au transport scolaire.
                   </p>
-                </motion.div>
+                </Motion.div>
 
-                <motion.div layout style={styles.rolesGrid}>
+                <Motion.div layout style={styles.rolesGrid}>
                   {roles.map((role, index) => (
-                    <motion.button
+                    <Motion.button
                       key={role.id}
                       layout
                       initial={{ opacity: 0, y: 20 }}
@@ -198,20 +198,20 @@ function AuthFlow() {
                       onClick={() => handleSelectRole(role.id)}
                       style={styles.roleCard}
                     >
-                      <motion.div
+                      <Motion.div
                         style={styles.roleIconWrap}
                         whileHover={{ rotate: [0, -5, 5, 0] }}
                         transition={{ duration: 0.4 }}
                       >
                         {role.icon}
-                      </motion.div>
+                      </Motion.div>
                       <h3 style={styles.roleTitle}>{role.title}</h3>
                       <p style={styles.roleSubtitle}>{role.subtitle}</p>
-                    </motion.button>
+                    </Motion.button>
                   ))}
-                </motion.div>
+                </Motion.div>
 
-                <motion.button
+                <Motion.button
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 0.7 }}
                   whileHover={{ opacity: 1 }}
@@ -221,12 +221,12 @@ function AuthFlow() {
                   style={styles.backLink}
                 >
                   ← Retour
-                </motion.button>
-              </motion.div>
+                </Motion.button>
+              </Motion.div>
             )}
 
             {step === "login" && currentRole && (
-              <motion.div
+              <Motion.div
                 key={`login-${currentRole.id}`}
                 layout
                 initial={{ opacity: 0, y: 16, scale: 0.985 }}
@@ -235,20 +235,20 @@ function AuthFlow() {
                 transition={smooth}
                 style={styles.loginStage}
               >
-                <motion.div
+                <Motion.div
                   layout
                   initial={{ opacity: 0, x: -16 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ ...smooth, delay: 0.05 }}
                   style={styles.selectedRoleCard}
                 >
-                  <motion.div
+                  <Motion.div
                     style={styles.selectedRoleIcon}
                     animate={{ scale: [1, 1.05, 1] }}
                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   >
                     {currentRole.icon}
-                  </motion.div>
+                  </Motion.div>
                   <div>
                     <p style={styles.selectedRoleLabel}>Rôle sélectionné</p>
                     <h2 style={styles.selectedRoleTitle}>{currentRole.title}</h2>
@@ -256,9 +256,9 @@ function AuthFlow() {
                       {currentRole.subtitle}
                     </p>
                   </div>
-                </motion.div>
+                </Motion.div>
 
-                <motion.form
+                <Motion.form
                   layout
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -273,14 +273,14 @@ function AuthFlow() {
                     </p>
                   </div>
 
-                  <motion.div
+                  <Motion.div
                     style={styles.fieldGroup}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ ...smooth, delay: 0.18 }}
                   >
                     <label style={styles.label}>Adresse e-mail</label>
-                    <motion.input
+                    <Motion.input
                       whileFocus={{ scale: 1.01, borderColor: "#e2bb40" }}
                       transition={micro}
                       type="email"
@@ -294,16 +294,16 @@ function AuthFlow() {
                       }
                       style={styles.input}
                     />
-                  </motion.div>
+                  </Motion.div>
 
-                  <motion.div
+                  <Motion.div
                     style={styles.fieldGroup}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ ...smooth, delay: 0.24 }}
                   >
                     <label style={styles.label}>Mot de passe</label>
-                    <motion.input
+                    <Motion.input
                       whileFocus={{ scale: 1.01, borderColor: "#e2bb40" }}
                       transition={micro}
                       type="password"
@@ -317,15 +317,15 @@ function AuthFlow() {
                       }
                       style={styles.input}
                     />
-                  </motion.div>
+                  </Motion.div>
 
-                  <motion.div
+                  <Motion.div
                     style={styles.formActions}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ ...smooth, delay: 0.3 }}
                   >
-                    <motion.button
+                    <Motion.button
                       type="button"
                       whileHover={{ x: -2 }}
                       whileTap={{ scale: 0.99 }}
@@ -334,9 +334,9 @@ function AuthFlow() {
                       style={styles.secondaryButton}
                     >
                       Retour
-                    </motion.button>
+                    </Motion.button>
 
-                    <motion.button
+                    <Motion.button
                       type="submit"
                       whileHover={{
                         y: -2,
@@ -348,13 +348,13 @@ function AuthFlow() {
                       style={styles.primaryButtonWide}
                     >
                       Se connecter
-                    </motion.button>
-                  </motion.div>
-                </motion.form>
-              </motion.div>
+                    </Motion.button>
+                  </Motion.div>
+                </Motion.form>
+              </Motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </Motion.div>
       </div>
     </div>
   );
@@ -363,17 +363,17 @@ function AuthFlow() {
 function SoftBackground() {
   return (
     <>
-      <motion.div
+      <Motion.div
         style={styles.bgBlobOne}
         animate={{ y: [0, -12, 0], x: [0, 8, 0] }}
         transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
       />
-      <motion.div
+      <Motion.div
         style={styles.bgBlobTwo}
         animate={{ y: [0, 10, 0], x: [0, -6, 0] }}
         transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
       />
-      <motion.div
+      <Motion.div
         style={styles.bgBlobThree}
         animate={{ y: [0, -8, 0], scale: [1, 1.05, 1] }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}

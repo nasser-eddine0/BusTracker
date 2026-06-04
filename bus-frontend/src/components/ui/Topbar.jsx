@@ -3,7 +3,7 @@ import { HiArrowRightOnRectangle, HiCog6Tooth } from "react-icons/hi2";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContextObject";
 import { useLanguage, LangSwitcher } from "../../i18n";
 import NotificationItem from "./NotificationItem";
 

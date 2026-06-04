@@ -40,6 +40,60 @@
           ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'driver')"
         }
       }
+    },
+    "active_trips": {
+      ".read": true,
+      "$tripId": {
+        ".write": "newData.exists() || data.exists()",
+        ".validate": "newData.hasChildren(['trip_id', 'bus_id', 'status']) && newData.child('trip_id').isNumber() && newData.child('bus_id').isNumber() && (newData.child('status').val() === 'in_progress' || newData.child('status').val() === 'completed')",
+        "trip_id": {
+          ".validate": "newData.isNumber()"
+        },
+        "bus_id": {
+          ".validate": "newData.isNumber()"
+        },
+        "driver_id": {
+          ".validate": "newData.isNumber() || newData.val() === null"
+        },
+        "type": {
+          ".validate": "newData.val() === 'aller' || newData.val() === 'retour'"
+        },
+        "status": {
+          ".validate": "newData.val() === 'in_progress' || newData.val() === 'completed'"
+        },
+        "started_at": {
+          ".validate": "newData.isString()"
+        },
+        "updated_at": {
+          ".validate": "newData.isString()"
+        },
+        "live_location": {
+          ".validate": "newData.val() === null || (newData.hasChildren(['lat', 'lng']) && newData.child('lat').isNumber() && newData.child('lng').isNumber())",
+          "lat": {
+            ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+          },
+          "lng": {
+            ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+          },
+          "updated_at": {
+            ".validate": "newData.isString()"
+          }
+        },
+        "live_attendance": {
+          "$studentId": {
+            ".validate": "newData.hasChildren(['status'])",
+            "status": {
+              ".validate": "newData.val() === 'waiting' || newData.val() === 'ready' || newData.val() === 'mounted' || newData.val() === 'in_bus' || newData.val() === 'absent' || newData.val() === 'dropped'"
+            },
+            "updated_at": {
+              ".validate": "newData.isString()"
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
     }
   }
 }

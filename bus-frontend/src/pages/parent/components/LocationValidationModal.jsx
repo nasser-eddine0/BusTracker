@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { HiLocationMarker, HiMap } from "react-icons/hi";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
@@ -99,7 +99,7 @@ export default function LocationValidationModal({ student, onLocationConfirmed }
           setIsSaving(false);
         }
       },
-      (err) => {
+      () => {
         toast.error("Could not get your location. Please pick from the map instead.");
         setStep("map");
       },

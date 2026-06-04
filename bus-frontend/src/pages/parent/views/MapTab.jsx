@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { HiTruck } from "react-icons/hi";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -47,18 +47,13 @@ function MapViewportUpdater({ targetCenter }) {
 }
 
 function MapTab({ t, busWithLiveLocation, student, distanceToBus, etaMinutes, proximityAlert }) {
-  const busPosition = useMemo(
-    () =>
-      busWithLiveLocation?.location
-        ? [busWithLiveLocation.location.lat, busWithLiveLocation.location.lng]
-        : null,
-    [busWithLiveLocation?.location]
-  );
+  const busPosition = busWithLiveLocation?.location
+    ? [busWithLiveLocation.location.lat, busWithLiveLocation.location.lng]
+    : null;
 
-  const homePosition = useMemo(
-    () => (student?.homeLocation ? [student.homeLocation.lat, student.homeLocation.lng] : null),
-    [student?.homeLocation]
-  );
+  const homePosition = student?.homeLocation
+    ? [student.homeLocation.lat, student.homeLocation.lng]
+    : null;
 
   const targetCenter = busPosition || homePosition || DEFAULT_CENTER;
 

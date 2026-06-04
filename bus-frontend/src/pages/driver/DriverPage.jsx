@@ -5,7 +5,7 @@ import { get, ref, remove, set, update } from "firebase/database";
 import toast from "react-hot-toast";
 import Sidebar from "../../components/ui/Sidebar";
 import { finalizeDriverTrip, fetchDriverDashboard, fetchDriverNotifications, startDriverTrip, updateDriverStudentStatus, pingDriverLocation, nudgeParent, markDriverNotificationsRead } from "../../api/driver";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContextObject";
 import { useActiveTripById, useRealtime } from "../../context/useRealtime";
 import { db } from "../../firebase";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
