@@ -105,6 +105,10 @@ class TripController extends Controller
         foreach ($admins as $admin) {
             $notifications[] = [
                 'recipient_user_id' => $admin->id,
+                'parent_id' => null,
+                'student_id' => null,
+                'bus_id' => $bus->id,
+                'trip_id' => $trip->id,
                 'created_by_user_id' => $driver->id,
                 'type' => 'trip_started',
                 'title' => 'Trajet demarre',
@@ -261,6 +265,10 @@ class TripController extends Controller
         foreach ($admins as $admin) {
             $notifications[] = [
                 'recipient_user_id' => $admin->id,
+                'parent_id' => null,
+                'student_id' => null,
+                'bus_id' => $trip->bus_id,
+                'trip_id' => $trip->id,
                 'created_by_user_id' => $driver->id,
                 'type' => 'trip_completed',
                 'title' => 'Trajet termine',
