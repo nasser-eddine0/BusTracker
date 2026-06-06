@@ -397,8 +397,8 @@ function ParentPage() {
       <header className="sticky top-0 z-40 border-b border-line bg-white/80 backdrop-blur-xl">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent text-sm font-extrabold text-slate-900">
-              <HiTruck className="text-base" />
+            <div className="grid h-11 w-11 place-items-center overflow-hidden rounded-2xl border border-line bg-white shadow-[var(--shadow-soft)]">
+              <img src="/logo.png" alt="BusTracker logo" className="h-8 w-8 object-contain" />
             </div>
             <div>
               <h1 className="text-sm font-extrabold leading-tight text-main">{t("busTracker")}</h1>

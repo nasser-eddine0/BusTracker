@@ -26,6 +26,9 @@ function RoleSelect() {
           <div className="relative z-10 space-y-8">
             <div className="space-y-4">
               <div className="flex items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[20px] border border-line bg-white shadow-[var(--shadow-soft)]">
+                  <img src="/logo.png" alt="BusTracker logo" className="h-10 w-10 object-contain" />
+                </div>
                 <div className="inline-flex rounded-full bg-accent/12 px-4 py-2 text-sm font-semibold text-accent">{t("platformTitle")}</div>
                 <LangSwitcher />
               </div>
@@ -52,10 +55,10 @@ function RoleSelect() {
             </div>
 
             <div className="grid gap-4">
-              {roles.map((role, index) => {
+              {roles.map((role) => {
                 const Icon = role.icon;
                 return (
-                  <motion.div key={role.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: index * 0.06 }}>
+                  <div key={role.id} className="transition-[transform,opacity] duration-300">
                     <Link to={`/signin?role=${role.id}`} className="group block rounded-[28px] border border-line bg-card-soft p-5 transition hover:-translate-y-1 hover:bg-card-muted">
                       <div className="flex items-start gap-4">
                         <div className="grid h-14 w-14 place-items-center rounded-[20px] bg-accent text-xl text-slate-950 shadow-[var(--shadow-accent)]"><Icon /></div>
@@ -65,7 +68,7 @@ function RoleSelect() {
                         </div>
                       </div>
                     </Link>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>

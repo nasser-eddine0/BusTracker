@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
 import { AuthContext } from "./AuthContextObject";
+export { useAuth } from "./AuthContextObject";
 
 function normalizeUser(user) {
   if (!user) return null;
@@ -19,6 +20,17 @@ function readCachedUser() {
     return rawUser ? normalizeUser(JSON.parse(rawUser)) : null;
   } catch {
     return null;
+  }
+}
+
+function clearClientAuthState() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("auth_user");
+
+  try {
+    sessionStorage.removeItem("admin_bootstrap_cache");
+  } catch {
+    // ignore storage cleanup failures
   }
 }
 
@@ -44,8 +56,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem("auth_user", JSON.stringify(nextUser));
       return nextUser;
     } catch {
-      localStorage.removeItem("token");
-      localStorage.removeItem("auth_user");
+      clearClientAuthState();
       setUser(null);
       return null;
     } finally {
@@ -83,8 +94,7 @@ export function AuthProvider({ children }) {
     } catch {
       // local cleanup still matters even if the API call fails
     } finally {
-      localStorage.removeItem("token");
-      localStorage.removeItem("auth_user");
+      clearClientAuthState();
       setUser(null);
       setLoading(false);
     }

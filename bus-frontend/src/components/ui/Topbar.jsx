@@ -1,14 +1,12 @@
 import { HiBell, HiOutlineSearch, HiUserCircle } from "react-icons/hi";
 import { HiArrowRightOnRectangle, HiCog6Tooth } from "react-icons/hi2";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContextObject";
 import { useLanguage, LangSwitcher } from "../../i18n";
 import NotificationItem from "./NotificationItem";
 
 function Topbar({ title, notifications = [] }) {
-  const navigate = useNavigate();
   const { signOut, user } = useAuth();
   const { t } = useLanguage();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -27,7 +25,7 @@ function Topbar({ title, notifications = [] }) {
     try {
       await signOut();
       toast.success(t("logout"));
-      navigate("/signin", { replace: true });
+      window.location.replace("/signin");
     } catch {
       toast.error(t("saveError"));
     }
@@ -36,9 +34,14 @@ function Topbar({ title, notifications = [] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          {title ? <p className="text-sm font-bold uppercase tracking-[0.18em] text-muted">{title}</p> : null}
-          <h1 className="text-2xl font-extrabold tracking-tight text-main">{t("opsDashboard")}</h1>
+        <div className="flex items-center gap-4">
+          <div className="hidden h-14 w-14 items-center justify-center overflow-hidden rounded-[20px] border border-line bg-white shadow-[var(--shadow-soft)] sm:flex">
+            <img src="/logo.png" alt="BusTracker logo" className="h-10 w-10 object-contain" />
+          </div>
+          <div>
+            {title ? <p className="text-sm font-bold uppercase tracking-[0.18em] text-muted">{title}</p> : null}
+            <h1 className="text-2xl font-extrabold tracking-tight text-main">{t("opsDashboard")}</h1>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

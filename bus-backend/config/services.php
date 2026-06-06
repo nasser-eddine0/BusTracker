@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'firebase' => [
+        'database_url' => env('FIREBASE_DATABASE_URL', 'https://bustracker-5e6c4-default-rtdb.firebaseio.com'),
+    ],
+
+    'xai' => [
+        'key' => env('XAI_API_KEY'),
+        'base_url' => env('XAI_BASE_URL', 'https://api.x.ai/v1'),
+        'model' => env('XAI_MODEL', 'grok-4.3'),
+    ],
+
 ];

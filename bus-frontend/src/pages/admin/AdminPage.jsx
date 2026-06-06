@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
-import { HiDatabase, HiHome, HiTruck, HiUserGroup } from "react-icons/hi";
+import { HiDatabase, HiHome, HiSparkles, HiTruck, HiUserGroup } from "react-icons/hi";
 import { HiClipboardDocumentList, HiUsers } from "react-icons/hi2";
 import { fetchAdminBootstrap } from "../../api/admin";
 import AppShell from "../../components/ui/AppShell";
@@ -42,6 +42,7 @@ function AdminPage() {
         HiTruck,
         HiUserGroup,
         HiClipboardDocumentList,
+        HiSparkles,
       }),
     [t]
   );
