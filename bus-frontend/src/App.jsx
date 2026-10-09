@@ -5,9 +5,12 @@ import { LanguageProvider } from "./i18n";
 import Driver from "./pages/Driver";
 import Parent from "./pages/Parent";
 import Admin from "./pages/Admin";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import SignIn from "./pages/SignIn";
 import RoleSelect from "./pages/RoleSelect";
 import ChatAssistant from "./pages/ChatAssistant";
+import NotFound from "./pages/NotFound";
+import ErrorBoundary from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import FloatingChatbot from "./components/FloatingChatbot";
 
@@ -47,6 +50,8 @@ function AnimatedRoutes() {
   const location = useLocation();
   const routeGroupKey = location.pathname.startsWith("/admin")
     ? "/admin"
+    : location.pathname.startsWith("/super-admin")
+      ? "/super-admin"
     : location.pathname.startsWith("/driver")
       ? "/driver"
     : location.pathname;
@@ -112,7 +117,24 @@ function AnimatedRoutes() {
             </PageTransition>
           }
         />
-        <Route path="*" element={<Navigate to="/choose-role" replace />} />
+        <Route
+          path="/super-admin"
+          element={
+            <PageTransition>
+              <ProtectedRoute allowedRoles={["super_admin"]}>
+                <SuperAdminDashboard />
+              </ProtectedRoute>
+            </PageTransition>
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <PageTransition>
+              <NotFound />
+            </PageTransition>
+          }
+        />
       </Routes>
     </AnimatePresence>
   );
@@ -122,10 +144,12 @@ function App() {
   return (
     <>
       <LanguageProvider>
-      <BrowserRouter>
-        <AnimatedRoutes />
-        <FloatingChatbot />
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <AnimatedRoutes />
+          <FloatingChatbot />
+        </BrowserRouter>
+      </ErrorBoundary>
       <Toaster
         position="top-center"
         containerStyle={{

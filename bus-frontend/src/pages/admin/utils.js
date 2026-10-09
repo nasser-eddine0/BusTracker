@@ -1,5 +1,5 @@
 export function buildAdminNavigation(t, icons) {
-  const { HiHome, HiUsers, HiDatabase, HiTruck, HiUserGroup, HiClipboardDocumentList, HiSparkles } = icons;
+  const { HiHome, HiUsers, HiDatabase, HiTruck, HiUserGroup, HiClipboardDocumentList, HiSparkles, HiCreditCard } = icons;
 
   return [{
     label: t("administration"),
@@ -10,6 +10,7 @@ export function buildAdminNavigation(t, icons) {
       { to: "/admin/fleet", label: t("fleetBuses"), helper: t("busAndDrivers"), icon: HiTruck },
       { to: "/admin/assignments", label: t("students"), helper: t("chooseBus"), icon: HiUserGroup },
       { to: "/admin/reports", label: t("reports"), helper: t("attendance"), icon: HiClipboardDocumentList },
+      { to: "/admin/billing", label: "Billing", helper: "Subscription", icon: HiCreditCard || HiSparkles },
     ],
   }];
 }

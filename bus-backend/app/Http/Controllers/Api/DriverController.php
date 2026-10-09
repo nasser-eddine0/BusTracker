@@ -3,13 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Admin;
 use App\Models\Bus;
-use App\Models\Chauffeur;
 use App\Models\Notification;
 use App\Models\Presence;
 use App\Models\Student;
 use App\Models\Trip;
+use App\Services\AdminNotificationRecipients;
 use App\Services\FirebaseService;
 use App\Services\NotificationBroadcaster;
 use Illuminate\Http\JsonResponse;
@@ -22,7 +21,13 @@ class DriverController extends Controller
     public function dashboard(Request $request): JsonResponse
     {
         $driver = $request->user();
-        $bus = Bus::query()->with(['students.parent', 'activeTrip'])->where('driver_id', $driver->id)->first();
+        $schoolId = (int) $driver->school_id;
+
+        $bus = Bus::query()
+            ->where('school_id', $schoolId)
+            ->with(['students.parent', 'activeTrip'])
+            ->where('driver_id', $driver->id)
+            ->first();
         $latestTrip = $bus?->trips()->latest('trip_date')->latest('id')->first();
 
         // Only clean up STALE trips from previous days — NOT today's active trip.
@@ -65,6 +70,7 @@ class DriverController extends Controller
                     ->all()
                 : [],
             'notifications' => Notification::query()
+                ->where('school_id', $schoolId)
                 ->where('recipient_user_id', $driver->id)
                 ->latest()
                 ->take(20)
@@ -82,16 +88,22 @@ class DriverController extends Controller
         ]);
     }
 
-    public function startTrip(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
+    public function startTrip(Request $request, NotificationBroadcaster $broadcaster, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         $validated = $request->validate([
-            'busId' => ['required', 'integer', 'exists:buses,id'],
+            'busId' => ['required', 'integer', $this->tenantExists('buses', $schoolId)],
         ]);
 
         $driver = $request->user();
-        $bus = Bus::query()->where('id', $validated['busId'])->where('driver_id', $driver->id)->firstOrFail();
+        $bus = Bus::query()
+            ->where('school_id', $schoolId)
+            ->where('id', $validated['busId'])
+            ->where('driver_id', $driver->id)
+            ->firstOrFail();
 
-        $trip = Chauffeur::query()->findOrFail($driver->id)->startTrip($bus);
+        $trip = $driver->startTrip($bus);
 
         $bus->update([
             'trip_status' => 'in_progress',
@@ -113,6 +125,7 @@ class DriverController extends Controller
         }
 
         $this->createAdminNotifications(
+            (int) $bus->school_id,
             $driver->id,
             'trip_started',
             'Trajet demarre',
@@ -121,21 +134,28 @@ class DriverController extends Controller
                 'busName' => $bus->bus_name,
                 'driverName' => $driver->name,
             ],
-            $broadcaster
+            $broadcaster,
+            $adminRecipients
         );
 
         return response()->json(['message' => 'Trip started.']);
     }
 
-    public function updateStudentStatus(Request $request, Student $student, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
+    public function updateStudentStatus(Request $request, Student $student, NotificationBroadcaster $broadcaster, FirebaseService $firebase, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         $validated = $request->validate([
             'status' => ['required', Rule::in(['mounted', 'absent', 'in_bus'])],
-            'busId' => ['required', 'integer', 'exists:buses,id'],
+            'busId' => ['required', 'integer', $this->tenantExists('buses', $schoolId)],
         ]);
 
         $driver = $request->user();
-        $bus = Bus::query()->where('id', $validated['busId'])->where('driver_id', $driver->id)->firstOrFail();
+        $bus = Bus::query()
+            ->where('school_id', $schoolId)
+            ->where('id', $validated['busId'])
+            ->where('driver_id', $driver->id)
+            ->firstOrFail();
 
         if ((int) $student->bus_id !== (int) $bus->id) {
             return response()->json(['message' => 'Student is not assigned to this bus.'], 422);
@@ -144,6 +164,7 @@ class DriverController extends Controller
         $student->update(['status' => $validated['status']]);
 
         $trip = Trip::query()
+            ->where('school_id', $schoolId)
             ->where('bus_id', $bus->id)
             ->whereDate('trip_date', now()->toDateString())
             ->latest('id')
@@ -155,8 +176,9 @@ class DriverController extends Controller
                     'student_id' => $student->id,
                     'trip_id' => $trip->id,
                 ],
-                [
-                    'status' => $validated['status'],
+                        [
+                            'school_id' => $bus->school_id,
+                            'status' => $validated['status'],
                     'recorded_at' => now(),
                 ]
             );
@@ -180,6 +202,7 @@ class DriverController extends Controller
         );
 
         $this->createAdminNotifications(
+            (int) $bus->school_id,
             $driver->id,
             $validated['status'],
             'Mise a jour eleve',
@@ -189,21 +212,30 @@ class DriverController extends Controller
                 'busName' => $bus->bus_name,
                 'driverName' => $driver->name,
             ],
-            $broadcaster
+            $broadcaster,
+            $adminRecipients
         );
 
         return response()->json(['message' => 'Student status updated.']);
     }
 
-    public function dropStudents(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
+    public function dropStudents(Request $request, NotificationBroadcaster $broadcaster, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         $validated = $request->validate([
-            'busId' => ['required', 'integer', 'exists:buses,id'],
+            'busId' => ['required', 'integer', $this->tenantExists('buses', $schoolId)],
         ]);
 
         $driver = $request->user();
-        $bus = Bus::query()->with('students.parent')->where('id', $validated['busId'])->where('driver_id', $driver->id)->firstOrFail();
+        $bus = Bus::query()
+            ->where('school_id', $schoolId)
+            ->with('students.parent')
+            ->where('id', $validated['busId'])
+            ->where('driver_id', $driver->id)
+            ->firstOrFail();
         $trip = Trip::query()
+            ->where('school_id', $schoolId)
             ->where('bus_id', $bus->id)
             ->whereDate('trip_date', now()->toDateString())
             ->latest('id')
@@ -220,6 +252,7 @@ class DriverController extends Controller
                             'trip_id' => $trip->id,
                         ],
                         [
+                            'school_id' => $bus->school_id,
                             'status' => 'dropped',
                             'recorded_at' => now(),
                         ]
@@ -252,6 +285,7 @@ class DriverController extends Controller
         });
 
         $this->createAdminNotifications(
+            (int) $bus->school_id,
             $driver->id,
             'trip_completed',
             'Trajet termine',
@@ -260,7 +294,8 @@ class DriverController extends Controller
                 'busName' => $bus->bus_name,
                 'driverName' => $driver->name,
             ],
-            $broadcaster
+            $broadcaster,
+            $adminRecipients
         );
 
         return response()->json(['message' => 'Drop-off completed.']);
@@ -301,19 +336,18 @@ class DriverController extends Controller
     }
 
     private function createAdminNotifications(
+        int $schoolId,
         int $authorId,
         string $type,
         string $title,
         string $message,
         array $payload,
         NotificationBroadcaster $broadcaster,
+        AdminNotificationRecipients $adminRecipients,
     ): void {
-        $admins = Admin::query()
-            ->where('status', 'active')
-            ->get(['id']);
-
-        foreach ($admins as $admin) {
+        foreach ($adminRecipients->activeForSchool($schoolId) as $admin) {
             $notification = Notification::create([
+                'school_id' => $schoolId,
                 'recipient_user_id' => $admin->id,
                 'created_by_user_id' => $authorId,
                 'type' => $type,
@@ -330,9 +364,11 @@ class DriverController extends Controller
     public function notifications(Request $request): JsonResponse
     {
         $driver = $request->user();
+        $schoolId = (int) $driver->school_id;
 
         return response()->json([
             'notifications' => Notification::query()
+                ->where('school_id', $schoolId)
                 ->where('recipient_user_id', $driver->id)
                 ->latest()
                 ->take(20)
@@ -352,7 +388,10 @@ class DriverController extends Controller
 
     public function markNotificationsRead(Request $request): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         Notification::query()
+            ->where('school_id', $schoolId)
             ->where('recipient_user_id', $request->user()->id)
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
@@ -390,5 +429,10 @@ class DriverController extends Controller
                 ? ['lat' => (float) $student->latitude, 'lng' => (float) $student->longitude]
                 : null,
         ];
+    }
+
+    private function tenantExists(string $table, int $schoolId, string $column = 'id'): \Illuminate\Validation\Rules\Exists
+    {
+        return Rule::exists($table, $column)->where(fn ($query) => $query->where('school_id', $schoolId));
     }
 }

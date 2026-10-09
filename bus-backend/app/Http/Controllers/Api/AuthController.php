@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -39,12 +40,12 @@ class AuthController extends Controller
         ], 201);
     }
 
-    public function login(Request $request): JsonResponse
+    public function login(Request $request, AuditLogger $auditLogger): JsonResponse
     {
         $validated = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
-            'role' => ['nullable', Rule::in(['parent', 'driver', 'admin'])],
+            'role' => ['nullable', Rule::in(['parent', 'driver', 'admin', 'super_admin'])],
         ]);
 
         $user = User::where('email', strtolower($validated['email']))->first();
@@ -70,6 +71,17 @@ class AuthController extends Controller
         $user->tokens()->delete();
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        $auditLogger->log([
+            'action' => 'user_logged_in',
+            'description' => "User '{$user->email}' logged in",
+            'user_id' => $user->id,
+            'school_id' => $user->school_id,
+            'new_values' => [
+                'role' => $user->role,
+                'email' => $user->email,
+            ],
+        ]);
+
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
@@ -93,6 +105,30 @@ class AuthController extends Controller
         ]);
     }
 
+    public function firebaseToken(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        
+        if (!$user) {
+            return response()->json([
+                'message' => 'Unauthenticated.',
+            ], 401);
+        }
+
+        try {
+            $firebaseToken = app(\App\Services\FirebaseService::class)->createCustomTokenForUser($user->id);
+
+            return response()->json([
+                'firebaseToken' => $firebaseToken,
+            ]);
+        } catch (\App\Exceptions\FirebaseRequestException $e) {
+            return response()->json([
+                'message' => 'Failed to generate Firebase token.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     private function serializeUser(User $user): array
     {
         $user->loadMissing(['drivenBus', 'children']);
@@ -105,6 +141,7 @@ class AuthController extends Controller
             'role' => $user->role,
             'status' => $user->status,
             'cin' => $user->cin,
+            'schoolId' => $user->school_id ? (string) $user->school_id : null,
             'busId' => $user->drivenBus?->id ? (string) $user->drivenBus->id : null,
             'studentId' => $user->children->count() === 1 ? (string) $user->children->first()->id : null,
         ];

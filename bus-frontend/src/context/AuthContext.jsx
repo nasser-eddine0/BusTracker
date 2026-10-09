@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
+import { auth, signInWithCustomToken, signOut as firebaseSignOut } from "../firebase";
 import { AuthContext } from "./AuthContextObject";
 export { useAuth } from "./AuthContextObject";
 
@@ -41,42 +42,62 @@ export function AuthProvider({ children }) {
     return Boolean(localStorage.getItem("token")) && !readCachedUser();
   });
 
-  const refreshProfile = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return null;
-    }
+    const refreshProfile = useCallback(async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setUser(null);
+        setLoading(false);
+        return null;
+      }
 
-    try {
-      const response = await api.get("/me");
-      const nextUser = normalizeUser(response.data.user);
-      setUser(nextUser);
-      localStorage.setItem("auth_user", JSON.stringify(nextUser));
-      return nextUser;
-    } catch {
-      clearClientAuthState();
-      setUser(null);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      try {
+        const response = await api.get("/me");
+        const nextUser = normalizeUser(response.data.user);
+        setUser(nextUser);
+        localStorage.setItem("auth_user", JSON.stringify(nextUser));
+        
+        // Re-initialize Firebase authentication with fresh token
+        try {
+          const firebaseTokenResponse = await api.get("/firebase-token");
+          await signInWithCustomToken(auth, firebaseTokenResponse.data.firebaseToken);
+        } catch (error) {
+          console.error("Failed to refresh Firebase authentication:", error);
+          // Don't fail the profile refresh if Firebase auth fails
+        }
+        
+        return nextUser;
+      } catch {
+        clearClientAuthState();
+        setUser(null);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    }, []);
 
   useEffect(() => {
     refreshProfile();
   }, [refreshProfile]);
 
-  const signIn = useCallback(async (payload) => {
-    const response = await api.post("/login", payload);
-    localStorage.setItem("token", response.data.access_token);
-    const nextUser = normalizeUser(response.data.user);
-    localStorage.setItem("auth_user", JSON.stringify(nextUser));
-    setUser(nextUser);
-    setLoading(false);
-    return nextUser;
-  }, []);
+    const signIn = useCallback(async (payload) => {
+      const response = await api.post("/login", payload);
+      localStorage.setItem("token", response.data.access_token);
+      const nextUser = normalizeUser(response.data.user);
+      localStorage.setItem("auth_user", JSON.stringify(nextUser));
+      setUser(nextUser);
+      setLoading(false);
+      
+      // Initialize Firebase authentication
+      try {
+        const firebaseTokenResponse = await api.get("/firebase-token");
+        await signInWithCustomToken(auth, firebaseTokenResponse.data.firebaseToken);
+      } catch (error) {
+        console.error("Failed to initialize Firebase authentication:", error);
+        // Don't fail the login if Firebase auth fails - the app can still work with REST API
+      }
+      
+      return nextUser;
+    }, []);
 
   const signUp = useCallback(async (payload) => {
     const response = await api.post("/register", payload);
@@ -88,17 +109,24 @@ export function AuthProvider({ children }) {
     return nextUser;
   }, []);
 
-  const signOut = useCallback(async () => {
-    try {
-      await api.post("/logout");
-    } catch {
-      // local cleanup still matters even if the API call fails
-    } finally {
-      clearClientAuthState();
-      setUser(null);
-      setLoading(false);
-    }
-  }, []);
+    const signOut = useCallback(async () => {
+      try {
+        await api.post("/logout");
+      } catch {
+        // local cleanup still matters even if the API call fails
+      } finally {
+        // Sign out from Firebase
+        try {
+          await firebaseSignOut(auth);
+        } catch (error) {
+          console.error("Failed to sign out from Firebase:", error);
+        }
+        
+        clearClientAuthState();
+        setUser(null);
+        setLoading(false);
+      }
+    }, []);
 
   const value = useMemo(() => {
     return {
@@ -106,6 +134,7 @@ export function AuthProvider({ children }) {
       profile: user,
       loading,
       role: user?.role || null,
+      schoolId: user?.schoolId || null,
       busId: user?.busId || null,
       studentId: user?.studentId || null,
       signIn,

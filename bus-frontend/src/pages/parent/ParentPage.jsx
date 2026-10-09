@@ -23,7 +23,7 @@ const MotionDiv = motion.div;
 
 function ParentPage() {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, schoolId, signOut } = useAuth();
   const { t } = useLanguage();
   const { busLocations } = useRealtime();
   const tabs = useMemo(() => [
@@ -273,9 +273,9 @@ function ParentPage() {
     toast.success(t("childReady"));
 
     // Update Firebase so the driver sees "ready" status in real-time
-    if (effectiveTripId) {
+    if (schoolId && effectiveTripId) {
       try {
-        await update(ref(db, `active_trips/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
+        await update(ref(db, `active_trips/${schoolId}/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
           status: "ready",
           updated_at: new Date().toISOString(),
         });
@@ -306,9 +306,9 @@ function ParentPage() {
       setStudent(response.data.student);
 
       // Update Firebase so the driver sees "absent" status in real-time
-      if (effectiveTripId) {
+      if (schoolId && effectiveTripId) {
         try {
-          await update(ref(db, `active_trips/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
+          await update(ref(db, `active_trips/${schoolId}/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
             status: "absent",
             updated_at: new Date().toISOString(),
           });

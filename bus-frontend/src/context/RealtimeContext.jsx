@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { onValue, ref } from "firebase/database";
 import { db } from "../firebase";
+import { useAuth } from "./AuthContextObject";
 import { RealtimeContext } from "./RealtimeContextObject";
 
 export function RealtimeProvider({ children, enabled = true }) {
+  const { schoolId } = useAuth();
   const [activeTrips, setActiveTrips] = useState({});
 
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled || !schoolId) {
+      setActiveTrips({});
+      return undefined;
+    }
 
     const unsubscribe = onValue(
-      ref(db, "active_trips"),
+      ref(db, `active_trips/${schoolId}`),
       (snapshot) => {
         setActiveTrips(snapshot.val() || {});
       },
@@ -20,7 +25,7 @@ export function RealtimeProvider({ children, enabled = true }) {
     );
 
     return unsubscribe;
-  }, [enabled]);
+  }, [enabled, schoolId]);
 
   const value = useMemo(() => {
     const busLocations = Object.values(activeTrips).reduce((accumulator, trip) => {

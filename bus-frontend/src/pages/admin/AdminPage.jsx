@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
-import { HiDatabase, HiHome, HiSparkles, HiTruck, HiUserGroup } from "react-icons/hi";
+import { HiCreditCard, HiDatabase, HiHome, HiSparkles, HiTruck, HiUserGroup } from "react-icons/hi";
 import { HiClipboardDocumentList, HiUsers } from "react-icons/hi2";
 import { fetchAdminBootstrap } from "../../api/admin";
 import AppShell from "../../components/ui/AppShell";
@@ -15,6 +15,7 @@ import AssignmentsPage from "./pages/AssignmentsPage";
 import DashboardPage from "./pages/DashboardPage";
 import FleetPage from "./pages/FleetPage";
 import ImportPage from "./pages/ImportPage";
+import SchoolAdminBilling from "./pages/SchoolAdminBilling";
 import UsersPage from "./pages/UsersPage";
 
 const MotionDiv = motion.div;
@@ -43,6 +44,7 @@ function AdminPage() {
         HiUserGroup,
         HiClipboardDocumentList,
         HiSparkles,
+        HiCreditCard,
       }),
     [t]
   );
@@ -139,6 +141,7 @@ function AdminPage() {
             <Route path="fleet" element={<FleetPage buses={buses} drivers={drivers} students={students} onRefresh={refreshAdminData} setBootstrap={setBootstrap} />} />
             <Route path="assignments" element={<AssignmentsPage buses={buses} students={students} onRefresh={refreshAdminData} />} />
             <Route path="reports" element={<AdminDashboard buses={buses} students={students} drivers={drivers} parents={parents} notifications={adminNotifications} summary={bootstrap.summary || {}} activeTrips={activeTrips} initialTab="archive" />} />
+            <Route path="billing" element={<SchoolAdminBilling />} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Routes>
         </MotionDiv>

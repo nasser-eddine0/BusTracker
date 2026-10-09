@@ -18,8 +18,10 @@ return new class extends Migration
         $table->timestamp('email_verified_at')->nullable();
         $table->string('password');
         
-        // Default public account role.
-        $table->string('role')->default('parent'); // admin, driver, parent
+        $table->foreignId('school_id')->nullable()->constrained('schools')->cascadeOnDelete();
+
+        // Default public account role. The legacy "admin" role is retained during the SaaS transition.
+        $table->enum('role', ['super_admin', 'admin', 'school_admin', 'driver', 'parent'])->default('parent');
         $table->string('phone')->nullable();
         $table->string('status')->default('active');
         $table->string('cin')->nullable();
@@ -53,5 +55,6 @@ return new class extends Migration
     // Framework support tables.
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('users');
     }
 };

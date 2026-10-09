@@ -1,14 +1,14 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { HiChartBar, HiTruck, HiUserGroup } from "react-icons/hi";
+import { HiChartBar, HiShieldCheck, HiTruck, HiUserGroup } from "react-icons/hi";
 import { FiEye, FiEyeOff, FiLock, FiMail } from "react-icons/fi";
 import ActionButton from "../components/ui/ActionButton";
 import { useAuth } from "../context/AuthContextObject";
 import { useLanguage, LangSwitcher } from "../i18n";
 
 function SignIn() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { signIn } = useAuth();
   const { t } = useLanguage();
@@ -16,6 +16,7 @@ function SignIn() {
 
   const roleOptions = useMemo(
     () => ({
+      super_admin: { label: "Super Admin", icon: HiShieldCheck, redirect: "/super-admin" },
       admin: { label: t("admin"), icon: HiChartBar, redirect: "/admin/dashboard" },
       driver: { label: t("driver"), icon: HiTruck, redirect: "/driver/trip" },
       parent: { label: t("parent"), icon: HiUserGroup, redirect: "/parent" },
@@ -88,7 +89,7 @@ function SignIn() {
             </div>
 
             {/* Profile Selection */}
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(roleOptions).map(([key, option]) => {
                 const Icon = option.icon;
                 const active = form.role === key;
@@ -96,7 +97,10 @@ function SignIn() {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setForm((c) => ({ ...c, role: key }))}
+                    onClick={() => {
+                      setForm((c) => ({ ...c, role: key }));
+                      setSearchParams({ role: key });
+                    }}
                     className={`rounded-[22px] border p-4 text-left transition ${
                       active
                         ? "border-accent/35 bg-accent-soft text-main"

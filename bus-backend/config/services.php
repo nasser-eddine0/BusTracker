@@ -37,6 +37,13 @@ return [
 
     'firebase' => [
         'database_url' => env('FIREBASE_DATABASE_URL', 'https://bustracker-5e6c4-default-rtdb.firebaseio.com'),
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+    ],
+
+    'stripe' => [
+        'key' => env('STRIPE_KEY'),
+        'secret' => env('STRIPE_SECRET'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
     'xai' => [

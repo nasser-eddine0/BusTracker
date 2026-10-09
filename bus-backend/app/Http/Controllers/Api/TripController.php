@@ -3,13 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Admin;
 use App\Models\Bus;
-use App\Models\Chauffeur;
 use App\Models\Notification;
 use App\Models\Presence;
 use App\Models\Student;
 use App\Models\Trip;
+use App\Services\AdminNotificationRecipients;
 use App\Services\FirebaseService;
 use App\Services\NotificationBroadcaster;
 use Illuminate\Http\JsonResponse;
@@ -20,15 +19,18 @@ use Illuminate\Validation\Rule;
 
 class TripController extends Controller
 {
-    public function start(Request $request, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
+    public function start(Request $request, NotificationBroadcaster $broadcaster, FirebaseService $firebase, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         $validated = $request->validate([
-            'busId' => ['required', 'integer', 'exists:buses,id'],
+            'busId' => ['required', 'integer', $this->tenantExists('buses', $schoolId)],
             'type' => ['nullable', Rule::in(['aller', 'retour'])],
         ]);
 
         $driver = $request->user();
         $bus = Bus::query()
+            ->where('school_id', $schoolId)
             ->with(['students.parent', 'activeTrip'])
             ->where('id', $validated['busId'])
             ->where('driver_id', $driver->id)
@@ -43,10 +45,7 @@ class TripController extends Controller
             // Reset all students to waiting before starting a new trip
             $bus->students()->update(['status' => 'waiting']);
 
-            $trip = Chauffeur::query()->findOrFail($driver->id)->startTrip(
-                $bus,
-                $validated['type'] ?? 'aller'
-            );
+            $trip = $driver->startTrip($bus, $validated['type'] ?? 'aller');
 
             $bus->update([
                 'trip_status' => 'in_progress',
@@ -56,6 +55,7 @@ class TripController extends Controller
 
             // Bulk-insert presence records for all students assigned to this bus
             $presenceRows = $bus->students->map(fn (Student $student) => [
+                'school_id' => $bus->school_id,
                 'student_id' => $student->id,
                 'trip_id' => $trip->id,
                 'status' => 'waiting',
@@ -81,6 +81,7 @@ class TripController extends Controller
             if ($student->parent_id) {
                 $notifications[] = [
                     'recipient_user_id' => $student->parent_id,
+                    'school_id' => $bus->school_id,
                     'parent_id' => $student->parent_id,
                     'student_id' => $student->id,
                     'bus_id' => $bus->id,
@@ -101,10 +102,10 @@ class TripController extends Controller
             }
         }
 
-        $admins = Admin::query()->where('status', 'active')->get(['id']);
-        foreach ($admins as $admin) {
+        foreach ($adminRecipients->activeForSchool((int) $bus->school_id) as $admin) {
             $notifications[] = [
                 'recipient_user_id' => $admin->id,
+                'school_id' => $bus->school_id,
                 'parent_id' => null,
                 'student_id' => null,
                 'bus_id' => $bus->id,
@@ -130,6 +131,7 @@ class TripController extends Controller
         // Realtime Firebase update
         $firebase->updateBusLocation((int) $bus->id, [
             'trip_id' => (string) $trip->id,
+            'school_id' => (string) $bus->school_id,
             'bus_id' => (string) $bus->id,
             'bus_name' => $bus->bus_name,
             'status' => 'in_progress',
@@ -153,11 +155,13 @@ class TripController extends Controller
         ], 201);
     }
 
-    public function finalize(Request $request, Trip $trip, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
+    public function finalize(Request $request, Trip $trip, NotificationBroadcaster $broadcaster, FirebaseService $firebase, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         $validated = $request->validate([
             'attendance' => ['required', 'array', 'min:1'],
-            'attendance.*.student_id' => ['required', 'integer', 'exists:students,id'],
+            'attendance.*.student_id' => ['required', 'integer', $this->tenantExists('students', $schoolId)],
             'attendance.*.status' => ['required', Rule::in(['waiting', 'mounted', 'absent', 'dropped'])],
             'attendance.*.recorded_at' => ['nullable', 'date'],
             'final_location' => ['nullable', 'array'],
@@ -175,6 +179,7 @@ class TripController extends Controller
         $attendanceRows = collect($validated['attendance'])
             ->map(fn (array $entry) => [
                 'student_id' => (int) $entry['student_id'],
+                'school_id' => $trip->school_id,
                 'trip_id' => (int) $trip->id,
                 'status' => $entry['status'],
                 'recorded_at' => !empty($entry['recorded_at'])
@@ -200,10 +205,11 @@ class TripController extends Controller
             DB::table('presences')->upsert(
                 $attendanceRows->all(),
                 ['student_id', 'trip_id'],
-                ['status', 'recorded_at']
+                ['school_id', 'status', 'recorded_at']
             );
 
             Student::query()
+                ->where('school_id', $trip->school_id)
                 ->whereIn('id', $attendanceRows->pluck('student_id')->all())
                 ->get()
                 ->each(function (Student $student) use ($attendanceRows): void {
@@ -241,6 +247,7 @@ class TripController extends Controller
 
             $notifications[] = [
                 'recipient_user_id' => $student->parent_id,
+                'school_id' => $trip->school_id,
                 'parent_id' => $student->parent_id,
                 'student_id' => $student->id,
                 'bus_id' => $trip->bus_id,
@@ -261,10 +268,10 @@ class TripController extends Controller
             ];
         }
 
-        $admins = Admin::query()->where('status', 'active')->get(['id']);
-        foreach ($admins as $admin) {
+        foreach ($adminRecipients->activeForSchool((int) $trip->school_id) as $admin) {
             $notifications[] = [
                 'recipient_user_id' => $admin->id,
+                'school_id' => $trip->school_id,
                 'parent_id' => null,
                 'student_id' => null,
                 'bus_id' => $trip->bus_id,
@@ -300,15 +307,18 @@ class TripController extends Controller
 
     public function pingLocation(Request $request, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         $validated = $request->validate([
-            'tripId' => ['required', 'integer', 'exists:trips,id'],
+            'tripId' => ['required', 'integer', $this->tenantExists('trips', $schoolId)],
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
-            'currentTargetId' => ['nullable', 'integer', 'exists:students,id'],
+            'currentTargetId' => ['nullable', 'integer', $this->tenantExists('students', $schoolId)],
         ]);
 
         $driver = $request->user();
         $trip = Trip::query()
+            ->where('school_id', $schoolId)
             ->with('bus')
             ->where('id', $validated['tripId'])
             ->where('driver_id', $driver->id)
@@ -323,6 +333,7 @@ class TripController extends Controller
 
         // Realtime Firebase update: Only update location to minimize payload
         $firebase->updateBusLocation((int) $trip->bus_id, [
+            'school_id' => (string) $trip->school_id,
             'live_location' => [
                 'lat' => (float) $validated['latitude'],
                 'lng' => (float) $validated['longitude'],
@@ -332,8 +343,9 @@ class TripController extends Controller
         $alerts = [];
 
         // Geofencing: check distance to current target student
-        if ($validated['currentTargetId']) {
+        if ($validated['currentTargetId'] ?? null) {
             $student = Student::query()
+                ->where('school_id', $schoolId)
                 ->with('parent')
                 ->where('id', $validated['currentTargetId'])
                 ->where('bus_id', $trip->bus_id)
@@ -396,13 +408,16 @@ class TripController extends Controller
 
     public function nudgeParent(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
     {
+        $schoolId = (int) $request->user()->school_id;
+
         $validated = $request->validate([
-            'tripId' => ['required', 'integer', 'exists:trips,id'],
-            'studentId' => ['required', 'integer', 'exists:students,id'],
+            'tripId' => ['required', 'integer', $this->tenantExists('trips', $schoolId)],
+            'studentId' => ['required', 'integer', $this->tenantExists('students', $schoolId)],
         ]);
 
         $driver = $request->user();
         $trip = Trip::query()
+            ->where('school_id', $schoolId)
             ->with('bus')
             ->where('id', $validated['tripId'])
             ->where('driver_id', $driver->id)
@@ -410,6 +425,7 @@ class TripController extends Controller
             ->firstOrFail();
 
         $student = Student::query()
+            ->where('school_id', $schoolId)
             ->with('parent')
             ->where('id', $validated['studentId'])
             ->where('bus_id', $trip->bus_id)
@@ -487,19 +503,18 @@ class TripController extends Controller
     }
 
     private function createAdminNotifications(
+        int $schoolId,
         int $authorId,
         string $type,
         string $title,
         string $message,
         array $payload,
         NotificationBroadcaster $broadcaster,
+        AdminNotificationRecipients $adminRecipients,
     ): void {
-        $admins = Admin::query()
-            ->where('status', 'active')
-            ->get(['id']);
-
-        foreach ($admins as $admin) {
+        foreach ($adminRecipients->activeForSchool($schoolId) as $admin) {
             $notification = Notification::create([
+                'school_id' => $schoolId,
                 'recipient_user_id' => $admin->id,
                 'created_by_user_id' => $authorId,
                 'type' => $type,
@@ -511,5 +526,10 @@ class TripController extends Controller
 
             $broadcaster->broadcast($notification);
         }
+    }
+
+    private function tenantExists(string $table, int $schoolId, string $column = 'id'): \Illuminate\Validation\Rules\Exists
+    {
+        return Rule::exists($table, $column)->where(fn ($query) => $query->where('school_id', $schoolId));
     }
 }

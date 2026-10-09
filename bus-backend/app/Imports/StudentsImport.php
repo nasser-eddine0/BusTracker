@@ -6,7 +6,6 @@ use App\Models\Student;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -85,15 +84,13 @@ class StudentsImport implements ToCollection, WithHeadingRow
                 }
 
                 // 1. Find or Create the Parent using CIN as unique key
-                $plainPassword = 'Bus' . rand(1000, 9999);
                 $parent = User::firstOrCreate(
                     ['cin' => $parentCin],
                     [
                         'name'             => $this->mapped($row, 'parent_name') ?? 'Parent',
                         'email'            => $this->mapped($row, 'parent_email') ?? strtolower($parentCin) . '@parent.generated',
                         'phone'            => $this->mapped($row, 'parent_phone'),
-                        'password'         => Hash::make($plainPassword),
-                        'default_password' => $plainPassword,
+                        'password'         => Str::password(16),
                         'role'             => 'parent',
                         'status'           => 'active',
                     ]

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { HiPencilSquare, HiTrash, HiUserPlus } from "react-icons/hi2";
-import { FaWhatsapp } from "react-icons/fa";
 import { RiWhatsappLine } from "react-icons/ri";
 import {
   createAdminUser,
@@ -21,7 +20,7 @@ import ModalShell from "../components/ModalShell";
 
 function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap }) {
   const { t } = useLanguage();
-  const [activeRole, setActiveRole] = useState("admin");
+  const [activeRole, setActiveRole] = useState("driver");
   const [search, setSearch] = useState("");
   const [editingUser, setEditingUser] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -30,10 +29,9 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap })
   const [selectedIds, setSelectedIds] = useState([]);
 
   const roleItems = useMemo(() => ({
-    admin: admins,
     driver: drivers,
     parent: parents,
-  }), [admins, drivers, parents]);
+  }), [drivers, parents]);
 
   const currentItems = roleItems[activeRole].filter((item) =>
     matchesSmartSearch(search, [item.name, item.email, item.phone, item.cin, item.status])
@@ -181,7 +179,7 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap })
     const message = t("whatsappMessage", {
       name: user.name,
       email: user.email,
-      password: user.defaultPassword || '••••••••',
+      password: t("password"),
       url: appUrl,
     });
 
@@ -204,7 +202,7 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap })
         const message = t("whatsappMessage", {
           name: user.name,
           email: user.email,
-          password: user.defaultPassword || '••••••••',
+          password: t("password"),
           url: appUrl,
         });
 
@@ -223,7 +221,7 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap })
     <div className="space-y-6">
       <PanelCard className="space-y-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <SectionHeader eyebrow={t("accounts")} title={t("adminsDriversParents")} description={t("centralizedSQL")} />
+          <SectionHeader eyebrow={t("accounts")} title={`${t("driver")} / ${t("parent")}`} description={t("centralizedSQL")} />
           <div className="flex flex-wrap gap-3">
             <input className="app-input h-10 w-full sm:w-[260px]" placeholder={t("searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} />
             <ActionButton onClick={openCreate}>
@@ -234,14 +232,14 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap })
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {["admin", "driver", "parent"].map((role) => (
+          {["driver", "parent"].map((role) => (
             <button
               key={role}
               type="button"
               onClick={() => { setActiveRole(role); setSelectedIds([]); }}
               className={`rounded-full px-4 py-2 text-sm font-bold ${activeRole === role ? "bg-accent text-slate-950" : "border border-line bg-white text-muted"}`}
             >
-              {role === "admin" ? t("admin") : role === "driver" ? t("driver") : t("parent")}
+              {role === "driver" ? t("driver") : t("parent")}
             </button>
           ))}
           {currentItems.length > 0 && (
@@ -324,7 +322,7 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap })
 
       {creating || editingUser ? (
         <ModalShell
-          title={editingUser ? `${t("edit")} ${editingUser.name}` : `${t("createAccount")} ${activeRole === "admin" ? t("admin") : activeRole === "driver" ? t("driver") : t("parent")}`}
+          title={editingUser ? `${t("edit")} ${editingUser.name}` : `${t("createAccount")} ${activeRole === "driver" ? t("driver") : t("parent")}`}
           description={t("centralizedSQL")}
           onClose={() => {
             setCreating(false);
@@ -339,7 +337,6 @@ function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap })
             submitLabel={editingUser ? t("save") : t("createBtn")}
             isSaving={isSaving}
             busOptions={buses}
-            defaultPassword={editingUser?.defaultPassword}
           />
           {editingUser ? (
             <div className="mt-4 flex justify-end">

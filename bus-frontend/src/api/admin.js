@@ -83,3 +83,18 @@ export async function updateAssignments(studentIds, busId) {
     busId: busId ? Number(busId) : null,
   });
 }
+
+export async function fetchBillingStatus() {
+  const response = await api.get("/admin/billing/status");
+  return response.data;
+}
+
+export async function subscribeBillingPlan(payload) {
+  const response = await api.post("/admin/billing/subscribe", payload);
+  return response.data;
+}
+
+export async function openBillingPortal(payload) {
+  const response = await api.post("/admin/billing/portal", payload);
+  return response.data;
+}

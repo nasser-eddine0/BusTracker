@@ -23,7 +23,7 @@ const MotionDiv = motion.div;
 function DriverPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, schoolId, signOut } = useAuth();
   const { t } = useLanguage();
   const driverNavigation = useMemo(() => buildDriverNavigation(t), [t]);
   const { busLocations: liveLocations } = useRealtime();
@@ -195,7 +195,7 @@ function DriverPage() {
   const statusText = statusStage === "door" ? t("atDoor") : statusStage === "near" ? t("arrivingPickup") : t("headingNext");
 
   useEffect(() => {
-    if (!tripStarted || !activeTripId) return undefined;
+    if (!schoolId || !tripStarted || !activeTripId) return undefined;
     if (!("geolocation" in navigator)) return undefined;
 
     let cancelled = false;
@@ -222,7 +222,7 @@ function DriverPage() {
           }
 
           try {
-            await update(ref(db, `active_trips/${activeTripId}`), {
+            await update(ref(db, `active_trips/${schoolId}/${activeTripId}`), {
               live_location: {
                 lat: coords.latitude,
                 lng: coords.longitude,
@@ -244,7 +244,7 @@ function DriverPage() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeTripId, tripStarted, currentStudentId]);
+  }, [activeTripId, tripStarted, currentStudentId, schoolId]);
 
   const handleNudgeParent = async () => {
     if (!currentStudent?.id || !activeTripId) return;
@@ -265,7 +265,7 @@ function DriverPage() {
   }, [location.pathname]);
 
   const handleStartTrip = async (type) => {
-    if (!bus?.id) return;
+    if (!schoolId || !bus?.id) return;
 
     setTripStarted(true);
     setTripCompleted(false);
@@ -285,10 +285,12 @@ function DriverPage() {
       );
 
       try {
-        await set(ref(db, `active_trips/${nextTripId}`), {
-          trip_id: Number(nextTripId),
-          bus_id: Number(bus.id),
-          driver_id: user?.id ? Number(user.id) : null,
+        await set(ref(db, `active_trips/${schoolId}/${nextTripId}`), {
+          trip_id: String(nextTripId),
+          school_id: String(schoolId),
+          bus_id: String(bus.id),
+          bus_name: bus.name || "",
+          driver_id: user?.id ? String(user.id) : null,
           type: data.trip?.type || type || "aller",
           status: "in_progress",
           started_at: data.trip?.startedAt || new Date().toISOString(),
@@ -338,7 +340,7 @@ function DriverPage() {
 
       if (activeTripId) {
         try {
-          await update(ref(db, `active_trips/${activeTripId}/live_attendance/${currentStudent.id}`), {
+          await update(ref(db, `active_trips/${schoolId}/${activeTripId}/live_attendance/${currentStudent.id}`), {
             status,
             updated_at: new Date().toISOString(),
           });
@@ -368,7 +370,7 @@ function DriverPage() {
       const tripType = activeTripState?.type || "aller";
       let liveAttendance = {};
       try {
-        const attendanceSnapshot = await get(ref(db, `active_trips/${activeTripId}/live_attendance`));
+        const attendanceSnapshot = await get(ref(db, `active_trips/${schoolId}/${activeTripId}/live_attendance`));
         liveAttendance = attendanceSnapshot.val() || {};
       } catch {
         liveAttendance = activeTripState?.live_attendance || {};
@@ -395,7 +397,7 @@ function DriverPage() {
         final_location: busLive?.location ? { lat: busLive.location.lat, lng: busLive.location.lng } : null,
       });
 
-      try { await remove(ref(db, `active_trips/${activeTripId}`)); } catch { /* ignore */ }
+      try { await remove(ref(db, `active_trips/${schoolId}/${activeTripId}`)); } catch { /* ignore */ }
       setActiveTripId(null);
       setTripCompleted(true);
       toast.success(t("dropCompleted"));
