@@ -12,17 +12,15 @@ export function useRealtime() {
 }
 
 export function useTripForBus(busId) {
-  const { activeTrips } = useRealtime();
+  const { activeBuses } = useRealtime();
 
   return useMemo(() => {
     if (!busId) return null;
 
-    const match = Object.entries(activeTrips).find(
-      ([, trip]) => String(trip?.bus_id) === String(busId) && trip?.status === "in_progress"
-    );
+    const activeBus = activeBuses?.[String(busId)];
 
-    return match ? String(match[0]) : null;
-  }, [activeTrips, busId]);
+    return activeBus?.trip_id ? String(activeBus.trip_id) : null;
+  }, [activeBuses, busId]);
 }
 
 export function useActiveTripById(tripId) {

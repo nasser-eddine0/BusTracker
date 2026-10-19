@@ -115,6 +115,12 @@ class AuthController extends Controller
             ], 401);
         }
 
+        if ($user->status !== 'active' || $user->trashed()) {
+            return response()->json([
+                'message' => 'This account is disabled.',
+            ], 403);
+        }
+
         try {
             $firebaseToken = app(\App\Services\FirebaseService::class)->createCustomTokenForUser($user->id);
 
@@ -122,10 +128,15 @@ class AuthController extends Controller
                 'firebaseToken' => $firebaseToken,
             ]);
         } catch (\App\Exceptions\FirebaseRequestException $e) {
-            return response()->json([
+            $payload = [
                 'message' => 'Failed to generate Firebase token.',
-                'error' => $e->getMessage(),
-            ], 500);
+            ];
+
+            if (app()->hasDebugModeEnabled()) {
+                $payload['error'] = $e->getMessage();
+            }
+
+            return response()->json($payload, 500);
         }
     }
 

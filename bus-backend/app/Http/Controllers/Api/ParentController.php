@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\FirebaseRequestException;
 use App\Http\Controllers\Controller;
 use App\Models\Bus;
 use App\Models\Notification;
@@ -14,7 +15,9 @@ use App\Services\NotificationBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 
 class ParentController extends Controller
 {
@@ -39,7 +42,7 @@ class ParentController extends Controller
         ]);
     }
 
-    public function linkChild(Request $request, FirebaseService $firebaseService): JsonResponse
+    public function linkChild(Request $request): JsonResponse
     {
         $parent = $request->user();
 
@@ -53,7 +56,7 @@ class ParentController extends Controller
             ->where('reg_code', $regCode)
             ->first();
 
-        if (!$student) {
+        if (! $student) {
             return response()->json([
                 'message' => 'The selected registration code is invalid.',
                 'errors' => [
@@ -63,13 +66,13 @@ class ParentController extends Controller
         }
 
         $school = $student->school;
-        if (!$school || !$school->is_active) {
+        if (! $school || ! $school->is_active) {
             return response()->json([
                 'message' => 'This school is deactivated or suspended.',
             ], 403);
         }
 
-        if (!$school->isSubscribed() && !$school->isOnTrial() && !$school->isOnGracePeriod()) {
+        if (! $school->isSubscribed() && ! $school->isOnTrial() && ! $school->isOnGracePeriod()) {
             return response()->json([
                 'message' => 'Your school subscription is inactive or expired. Please update billing to continue.',
             ], 403);
@@ -93,14 +96,22 @@ class ParentController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($parent, $student, $firebaseService) {
+        DB::transaction(function () use ($parent, $student) {
             if ($parent->school_id === null) {
                 $parent->update(['school_id' => $student->school_id]);
-                // Update Firebase school_users mapping for the parent
-                $firebaseService->createCustomTokenForUser($parent->id);
             }
             $student->update(['parent_id' => $parent->id]);
         });
+
+        try {
+            app(FirebaseService::class)->createCustomTokenForUser($parent->id);
+        } catch (FirebaseRequestException $exception) {
+            Log::warning('Failed to update Firebase membership after child link.', [
+                'user_id' => $parent->id,
+                'school_id' => $student->school_id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
 
         return response()->json([
             'message' => 'Child linked successfully.',
@@ -114,8 +125,8 @@ class ParentController extends Controller
 
         $validated = $request->validate([
             'student_id' => ['required', 'integer', $this->tenantExists('students', $schoolId)],
-            'latitude'   => ['required', 'numeric', 'between:-90,90'],
-            'longitude'  => ['required', 'numeric', 'between:-180,180'],
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
         ]);
 
         $parent = $request->user();
@@ -126,10 +137,10 @@ class ParentController extends Controller
             ->firstOrFail();
 
         $student->update([
-            'latitude'           => $validated['latitude'],
-            'longitude'          => $validated['longitude'],
-            'home_lat'           => $validated['latitude'],
-            'home_lng'           => $validated['longitude'],
+            'latitude' => $validated['latitude'],
+            'longitude' => $validated['longitude'],
+            'home_lat' => $validated['latitude'],
+            'home_lng' => $validated['longitude'],
             'location_conformee' => true,
         ]);
 
@@ -154,6 +165,35 @@ class ParentController extends Controller
             ->where('id', $validated['studentId'])
             ->where('parent_id', $parent->id)
             ->firstOrFail();
+
+        $trip = Trip::query()
+            ->where('school_id', $schoolId)
+            ->where('bus_id', $student->bus_id)
+            ->where('status', 'in_progress')
+            ->whereDate('trip_date', now()->toDateString())
+            ->latest('id')
+            ->first();
+
+        $student->update(['status' => 'ready']);
+
+        if ($trip) {
+            Presence::updateOrCreate(
+                [
+                    'student_id' => $student->id,
+                    'trip_id' => $trip->id,
+                ],
+                [
+                    'school_id' => $schoolId,
+                    'status' => 'ready',
+                    'recorded_at' => now(),
+                ]
+            );
+            $this->projectRealtime('parent_ready_declared', [
+                'student_id' => (int) $student->id,
+                'trip_id' => (int) $trip->id,
+                'school_id' => (int) $schoolId,
+            ], fn (FirebaseService $firebase) => $firebase->updateTripAttendance($trip, (int) $student->id, 'ready'));
+        }
 
         if ($student->bus?->driver_id) {
             $notification = Notification::create([
@@ -198,6 +238,7 @@ class ParentController extends Controller
         $trip = Trip::query()
             ->where('school_id', $schoolId)
             ->where('bus_id', $student->bus_id)
+            ->where('status', 'in_progress')
             ->whereDate('trip_date', now()->toDateString())
             ->latest('id')
             ->first();
@@ -214,6 +255,11 @@ class ParentController extends Controller
                     'recorded_at' => now(),
                 ]
             );
+            $this->projectRealtime('parent_absence_declared', [
+                'student_id' => (int) $student->id,
+                'trip_id' => (int) $trip->id,
+                'school_id' => (int) $schoolId,
+            ], fn (FirebaseService $firebase) => $firebase->updateTripAttendance($trip, (int) $student->id, 'absent'));
         }
 
         if ($student->bus?->driver_id) {
@@ -351,8 +397,19 @@ class ParentController extends Controller
         ];
     }
 
-    private function tenantExists(string $table, int $schoolId, string $column = 'id'): \Illuminate\Validation\Rules\Exists
+    private function tenantExists(string $table, int $schoolId, string $column = 'id'): Exists
     {
         return Rule::exists($table, $column)->where(fn ($query) => $query->where('school_id', $schoolId));
+    }
+
+    private function projectRealtime(string $event, array $context, callable $callback): void
+    {
+        try {
+            $callback(app(FirebaseService::class));
+        } catch (FirebaseRequestException $exception) {
+            Log::warning("Firebase realtime projection failed: {$event}", $context + [
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

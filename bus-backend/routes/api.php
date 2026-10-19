@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\ParentController;
 use App\Http\Controllers\Api\SchoolAdmin\BillingController;
 use App\Http\Controllers\Api\StripeWebhookController;
 use App\Http\Controllers\Api\SuperAdmin\AuditLogController;
+use App\Http\Controllers\Api\SuperAdmin\AccountController;
+use App\Http\Controllers\Api\SuperAdmin\FirebaseSyncController;
 use App\Http\Controllers\Api\SuperAdmin\SchoolController;
 use App\Http\Controllers\Api\TripController;
 use Illuminate\Support\Facades\Route;
@@ -28,7 +30,14 @@ Route::middleware(['auth:sanctum', 'school.owner'])->group(function () {
     Route::get('/firebase-token', [AuthController::class, 'firebaseToken']);
 
     Route::middleware('super_admin')->prefix('super-admin')->group(function () {
+        Route::get('/account', [AccountController::class, 'show']);
+        Route::put('/account', [AccountController::class, 'update']);
+        Route::put('/account/password', [AccountController::class, 'password'])->middleware('throttle:5,1');
+        Route::get('/account/sessions', [AccountController::class, 'sessions']);
+        Route::delete('/account/sessions/{session}', [AccountController::class, 'revoke'])->whereNumber('session');
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
+        Route::get('/firebase-syncs', [FirebaseSyncController::class, 'index']);
+        Route::post('/firebase-syncs/{sync}/retry', [FirebaseSyncController::class, 'retry'])->whereNumber('sync');
         Route::get('/schools', [SchoolController::class, 'index']);
         Route::get('/admins', [SchoolController::class, 'indexAdmins']);
         Route::post('/schools', [SchoolController::class, 'store']);
@@ -36,6 +45,7 @@ Route::middleware(['auth:sanctum', 'school.owner'])->group(function () {
         Route::patch('/schools/{school}/toggle-status', [SchoolController::class, 'toggleStatus']);
         Route::post('/schools/{school}/admins', [SchoolController::class, 'storeAdmin']);
         Route::put('/admins/{user}', [SchoolController::class, 'updateAdmin']);
+        Route::delete('/admins/{user}', [SchoolController::class, 'destroyAdmin']);
     });
 
     Route::middleware(['role:admin', 'school.active', 'subscription.active'])->prefix('admin')->group(function () {

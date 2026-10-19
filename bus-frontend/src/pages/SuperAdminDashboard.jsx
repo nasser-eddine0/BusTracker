@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import {
   FiActivity,
@@ -21,6 +21,8 @@ import PanelCard from "../components/ui/PanelCard";
 import SectionHeader from "../components/ui/SectionHeader";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContextObject";
+import { useLanguage } from "../i18n/LanguageContextObject";
+import SuperAdminAccount from "./SuperAdminAccount";
 
 const emptySchoolForm = {
   name: "",
@@ -37,6 +39,7 @@ const emptyAdminForm = {
 };
 
 const emptyAuditFilters = {
+  severity: "",
   action: "",
   school_id: "",
   user_id: "",
@@ -59,6 +62,10 @@ function normalizeSchool(school) {
     ...school,
     max_buses: Number(school.max_buses ?? 0),
     admin_count: Number(school.admin_count ?? 0),
+    user_count: Number(school.user_count ?? 0),
+    student_count: Number(school.student_count ?? 0),
+    bus_count: Number(school.bus_count ?? 0),
+    firebase_sync: school.firebase_sync || { pending: 0, failed: 0, synced: 0, total: 0, status: "not_tracked" },
     is_active: Boolean(school.is_active),
     subscription_status: school.subscription_status || "inactive",
   };
@@ -88,6 +95,21 @@ function StatCard({ label, value, helper }) {
 
 function SuperAdminDashboard() {
   const { signOut, user } = useAuth();
+  const { lang, setLang } = useLanguage();
+  const auditRequest = useRef(0);
+  const pendingWrites = useRef(new Set());
+  const schoolRequest = useRef(0);
+  const adminRequest = useRef(0);
+  const appliedAuditFilters = useRef(emptyAuditFilters);
+  const [schoolError, setSchoolError] = useState("");
+  const [adminError, setAdminError] = useState("");
+  const [auditError, setAuditError] = useState("");
+  const [syncError, setSyncError] = useState("");
+  const [accountName, setAccountName] = useState(null);
+  const [adminQuery, setAdminQuery] = useState("");
+  const [billingQuery, setBillingQuery] = useState("");
+  const [billingStatus, setBillingStatus] = useState("");
+  const [changingSchools, setChangingSchools] = useState([]);
   const [activeView, setActiveView] = useState("dashboard");
   const [schools, setSchools] = useState([]);
   const [loadingSchools, setLoadingSchools] = useState(true);
@@ -118,28 +140,38 @@ function SuperAdminDashboard() {
   const [auditMeta, setAuditMeta] = useState({ current_page: 1, last_page: 1, total: 0, per_page: 20 });
   const [auditFilters, setAuditFilters] = useState(emptyAuditFilters);
   const [loadingAudit, setLoadingAudit] = useState(false);
+  const [syncs, setSyncs] = useState([]);
+  const [loadingSyncs, setLoadingSyncs] = useState(false);
 
   const fetchSchools = async () => {
+    const requestId = ++schoolRequest.current;
     setLoadingSchools(true);
     try {
       const response = await api.get("/super-admin/schools");
+      if (requestId !== schoolRequest.current) return;
+      setSchoolError("");
       setSchools((response.data.schools || []).map(normalizeSchool));
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Unable to load schools.");
+      if (requestId !== schoolRequest.current) return;
+      setSchoolError(error?.response?.data?.message || "Unable to load schools. Refresh to retry.");
     } finally {
-      setLoadingSchools(false);
+      if (requestId === schoolRequest.current) setLoadingSchools(false);
     }
   };
 
-  const fetchAuditLogs = async (page = 1) => {
+  const fetchAuditLogs = async (page = 1, filters = auditFilters) => {
+    const requestId = ++auditRequest.current;
     setLoadingAudit(true);
     try {
       const params = {
         page,
         limit: auditMeta.per_page || 20,
-        ...Object.fromEntries(Object.entries(auditFilters).filter(([, value]) => value)),
+        ...Object.fromEntries(Object.entries(filters).filter(([, value]) => value)),
       };
       const response = await api.get("/super-admin/audit-logs", { params });
+      if (requestId !== auditRequest.current) return;
+      appliedAuditFilters.current = { ...filters };
+      setAuditError("");
       setAuditLogs(response.data.data || []);
       setAuditMeta({
         current_page: response.data.current_page || 1,
@@ -148,31 +180,63 @@ function SuperAdminDashboard() {
         per_page: response.data.per_page || 20,
       });
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Unable to load audit logs.");
+      if (requestId !== auditRequest.current) return;
+      setAuditLogs([]);
+      setAuditError(Object.values(error?.response?.data?.errors || {}).flat()[0] || error?.response?.data?.message || "Unable to load audit logs. Apply filters to retry.");
     } finally {
-      setLoadingAudit(false);
+      if (requestId === auditRequest.current) setLoadingAudit(false);
     }
   };
 
   const fetchAdmins = async () => {
+    const requestId = ++adminRequest.current;
     setLoadingAdmins(true);
     try {
       const response = await api.get("/super-admin/admins");
+      if (requestId !== adminRequest.current) return;
+      setAdminError("");
       setAdmins(response.data.admins || []);
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Unable to load admin accounts.");
+      if (requestId !== adminRequest.current) return;
+      setAdminError(error?.response?.data?.message || "Unable to load admin accounts. Refresh to retry.");
     } finally {
-      setLoadingAdmins(false);
+      if (requestId === adminRequest.current) setLoadingAdmins(false);
+    }
+  };
+
+  const fetchSyncs = async () => {
+    setLoadingSyncs(true);
+    try {
+      const response = await api.get("/super-admin/firebase-syncs", { params: { per_page: 100 } });
+      setSyncs(response.data.data || []);
+      setSyncError("");
+    } catch (error) {
+      setSyncError(error?.response?.data?.message || "Unable to load Firebase synchronization status.");
+    } finally {
+      setLoadingSyncs(false);
     }
   };
 
   useEffect(() => {
     fetchSchools();
+    fetchSyncs();
   }, []);
 
+  const retrySync = async (syncId) => {
+    try {
+      await api.post(`/super-admin/firebase-syncs/${syncId}/retry`);
+      toast.success("Firebase synchronization queued.");
+      await Promise.all([fetchSyncs(), fetchSchools()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Unable to retry Firebase synchronization.");
+    }
+  };
+
   useEffect(() => {
-    if (activeView === "audit") {
-      fetchAuditLogs(1);
+    if (activeView === "audit" || activeView === "security") {
+      const filters = { ...emptyAuditFilters, severity: activeView === "security" ? "warning" : "" };
+      setAuditFilters(filters);
+      fetchAuditLogs(1, filters);
     }
 
     if (activeView === "users") {
@@ -276,6 +340,8 @@ function SuperAdminDashboard() {
 
   const handleSchoolSubmit = async (event) => {
     event.preventDefault();
+    if (pendingWrites.current.has("school")) return;
+    pendingWrites.current.add("school");
     setSavingSchool(true);
 
     const payload = {
@@ -291,44 +357,59 @@ function SuperAdminDashboard() {
         : await api.post("/super-admin/schools", payload);
 
       const nextSchool = normalizeSchool(response.data.school);
+      ++schoolRequest.current;
+      setLoadingSchools(false);
       setSchools((current) => {
         if (!editingSchool) return [nextSchool, ...current];
         return current.map((school) => (school.id === nextSchool.id ? nextSchool : school));
       });
 
       toast.success(response.data.message || "School saved successfully.");
-      closeSchoolModal();
+      setSchoolModalOpen(false);
+      setEditingSchool(null);
+      setSchoolForm(emptySchoolForm);
     } catch (error) {
       const firstError = error?.response?.data?.errors ? Object.values(error.response.data.errors).flat()[0] : null;
       toast.error(firstError || error?.response?.data?.message || "Unable to save school.");
     } finally {
+      pendingWrites.current.delete("school");
       setSavingSchool(false);
     }
   };
 
   const toggleStatus = async (school) => {
+    const key = `status:${school.id}`;
+    if (pendingWrites.current.has(key)) return;
+    pendingWrites.current.add(key);
+    setChangingSchools((current) => [...current, school.id]);
     const nextStatus = !school.is_active;
-    setSchools((current) => current.map((item) => (item.id === school.id ? { ...item, is_active: nextStatus } : item)));
 
     try {
       const response = await api.patch(`/super-admin/schools/${school.id}/toggle-status`, { is_active: nextStatus });
       const nextSchool = normalizeSchool(response.data.school);
+      ++schoolRequest.current;
+      setLoadingSchools(false);
       setSchools((current) => current.map((item) => (item.id === nextSchool.id ? nextSchool : item)));
       toast.success(response.data.message || "School status updated.");
     } catch (error) {
       setSchools((current) => current.map((item) => (item.id === school.id ? { ...item, is_active: school.is_active } : item)));
       toast.error(error?.response?.data?.message || "Unable to update school status.");
+    } finally {
+      pendingWrites.current.delete(key);
+      setChangingSchools((current) => current.filter((id) => id !== school.id));
     }
   };
 
   const handleAdminSubmit = async (event) => {
     event.preventDefault();
     if (!adminSchool) return;
+    if (pendingWrites.current.has("admin")) return;
     if (!adminForm.name.trim() || !adminForm.email.trim() || !adminForm.password.trim()) {
       toast.error("Name, email, and password are required.");
       return;
     }
 
+    pendingWrites.current.add("admin");
     setSavingAdmin(true);
     try {
       const response = await api.post(`/super-admin/schools/${adminSchool.id}/admins`, {
@@ -343,11 +424,14 @@ function SuperAdminDashboard() {
       setSchools((current) => current.map((school) => (school.id === nextSchool.id ? nextSchool : school)));
       await fetchAdmins();
       toast.success(response.data.message || "School admin account created successfully.");
-      closeAdminModal();
+      setAdminModalOpen(false);
+      setAdminForm(emptyAdminForm);
+      setAdminSchool(null);
     } catch (error) {
       const firstError = error?.response?.data?.errors ? Object.values(error.response.data.errors).flat()[0] : null;
       toast.error(firstError || error?.response?.data?.message || "Unable to create school admin.");
     } finally {
+      pendingWrites.current.delete("admin");
       setSavingAdmin(false);
     }
   };
@@ -355,18 +439,21 @@ function SuperAdminDashboard() {
   const handleAdminProfileSubmit = async (event) => {
     event.preventDefault();
     if (!editingAdmin) return;
+    if (pendingWrites.current.has("profile")) return;
+    if (adminProfileForm.role === "super_admin" && !window.confirm("Grant platform-wide Super Admin access to this account?")) return;
     if (!adminProfileForm.name.trim() || !adminProfileForm.email.trim()) {
       toast.error("Name and email are required.");
       return;
     }
 
+    pendingWrites.current.add("profile");
     setSavingAdminProfile(true);
     try {
       const payload = {
         name: adminProfileForm.name.trim(),
         email: adminProfileForm.email.trim().toLowerCase(),
         phone: adminProfileForm.phone.trim() || null,
-        password: adminProfileForm.password.trim() || undefined,
+        password: adminProfileForm.password || undefined,
         school_id: adminProfileForm.school_id ? Number(adminProfileForm.school_id) : null,
         role: adminProfileForm.role,
         status: adminProfileForm.status,
@@ -382,22 +469,36 @@ function SuperAdminDashboard() {
         school: response.data.admin.school,
       } : admin)));
 
-      const nextSchool = schools.find((school) => String(school.id) === String(response.data.admin.school_id));
-      if (nextSchool) {
-        setSchools((current) => current.map((school) => (String(school.id) === String(nextSchool.id) ? { ...school, admin_count: Math.max(0, school.admin_count) } : school)));
-      }
+      await fetchSchools();
+      await fetchAdmins();
 
       toast.success(response.data.message || "Admin updated successfully.");
-      closeAdminProfileModal();
+      setAdminProfileModalOpen(false);
+      setEditingAdmin(null);
+      setAdminProfileForm((current) => ({ ...current, password: "" }));
     } catch (error) {
       const firstError = error?.response?.data?.errors ? Object.values(error.response.data.errors).flat()[0] : null;
       toast.error(firstError || error?.response?.data?.message || "Unable to update admin.");
     } finally {
+      pendingWrites.current.delete("profile");
       setSavingAdminProfile(false);
     }
   };
 
+  const deleteAdmin = async (admin) => {
+    if (!window.confirm(`Delete administrator ${admin.name}? Their API sessions and Firebase membership will be revoked.`)) return;
+    try {
+      await api.delete(`/super-admin/admins/${admin.id}`);
+      setAdmins((current) => current.filter((item) => item.id !== admin.id));
+      await Promise.all([fetchSchools(), fetchSyncs()]);
+      toast.success("Administrator deleted.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Unable to delete administrator.");
+    }
+  };
+
   const renderDashboard = () => (
+    loadingSchools ? <p role="status">Loading schools...</p> : schoolError ? null :
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total Schools" value={schools.length} helper="All tenants" />
@@ -478,8 +579,8 @@ function SuperAdminDashboard() {
                 <th className="px-5 py-3 font-bold">School</th>
                 <th className="px-5 py-3 font-bold">Subdomain</th>
                 <th className="px-5 py-3 font-bold">Plan Status</th>
-                <th className="px-5 py-3 font-bold">Max Buses</th>
-                <th className="px-5 py-3 font-bold">Admins</th>
+                <th className="px-5 py-3 font-bold">Usage</th>
+                <th className="px-5 py-3 font-bold">Firebase sync</th>
                 <th className="px-5 py-3 font-bold">Active</th>
                 <th className="px-5 py-3 text-right font-bold">Actions</th>
               </tr>
@@ -487,7 +588,7 @@ function SuperAdminDashboard() {
             <tbody className="divide-y divide-line">
               {loadingSchools ? (
                 <tr><td colSpan="7" className="px-5 py-12 text-center text-muted">Loading schools...</td></tr>
-              ) : filteredSchools.length === 0 ? (
+              ) : schoolError ? null : filteredSchools.length === 0 ? (
                 <tr><td colSpan="7" className="px-5 py-12 text-center text-muted">No schools found.</td></tr>
               ) : (
                 filteredSchools.map((school) => (
@@ -504,10 +605,16 @@ function SuperAdminDashboard() {
                         {school.subscription_status}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-muted">{school.max_buses}</td>
-                    <td className="px-5 py-4 text-muted">{school.admin_count}</td>
+                    <td className="px-5 py-4 text-muted">{school.user_count} users, {school.student_count} students, {school.bus_count}/{school.max_buses} buses, {school.admin_count} admins</td>
                     <td className="px-5 py-4">
-                      <button type="button" onClick={() => toggleStatus(school)} className={`inline-flex h-7 w-12 items-center rounded-full p-1 transition ${school.is_active ? "bg-emerald-500" : "bg-slate-300"}`}>
+                      <div className="text-xs font-semibold text-muted">{school.firebase_sync.status} ({school.firebase_sync.pending} pending, {school.firebase_sync.failed} failed)</div>
+                      {syncs.filter((sync) => String(sync.school_id) === String(school.id) && ["pending", "failed"].includes(sync.status)).map((sync) => (
+                        <button key={sync.id} type="button" onClick={() => retrySync(sync.id)} disabled={loadingSyncs} className="mt-1 block text-xs font-bold text-accent underline disabled:opacity-50">Retry #{sync.id}</button>
+                      ))}
+                      {syncError ? <span className="block text-xs text-rose-700">Status unavailable</span> : null}
+                    </td>
+                    <td className="px-5 py-4">
+                      <button type="button" role="switch" aria-checked={school.is_active} aria-label={`School access: ${school.name}`} disabled={changingSchools.includes(school.id)} onClick={() => toggleStatus(school)} className={`inline-flex h-7 w-12 items-center rounded-full p-1 transition disabled:opacity-40 ${school.is_active ? "bg-emerald-500" : "bg-slate-300"}`}>
                         <span className={`h-5 w-5 rounded-full bg-white transition ${school.is_active ? "translate-x-5" : "translate-x-0"}`} />
                       </button>
                     </td>
@@ -532,7 +639,17 @@ function SuperAdminDashboard() {
   );
 
   const renderBilling = () => (
-    <PanelCard className="overflow-hidden p-0">
+    <section className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <input aria-label="Search billing schools" className="app-input sm:max-w-xs" placeholder="Search billing schools" value={billingQuery} onChange={(event) => setBillingQuery(event.target.value)} />
+        <select aria-label="Subscription status" className="app-input sm:max-w-xs" value={billingStatus} onChange={(event) => setBillingStatus(event.target.value)}>
+          <option value="">All subscription statuses</option>
+          {[...new Set(schools.map((school) => school.subscription_status))].sort().map((status) => <option key={status}>{status}</option>)}
+        </select>
+        <ActionButton variant="secondary" disabled={loadingSchools} onClick={fetchSchools}><FiRefreshCw /> Refresh</ActionButton>
+      </div>
+      <p className="text-sm text-muted">Stored subscription records. Payments and invoices: Stripe / school-admin billing.</p>
+      <PanelCard className="overflow-hidden p-0">
       <div className="border-b border-line px-5 py-4">
         <h2 className="text-lg font-extrabold text-main">Billing Overview</h2>
       </div>
@@ -543,11 +660,12 @@ function SuperAdminDashboard() {
               <th className="px-5 py-3 font-bold">School</th>
               <th className="px-5 py-3 font-bold">Subscription</th>
               <th className="px-5 py-3 font-bold">Bus Limit</th>
-              <th className="px-5 py-3 font-bold">Stripe Customer</th>
+              <th className="px-5 py-3 font-bold">Stripe references</th>
+              <th className="px-5 py-3 font-bold">Trial / subscription end</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {schools.map((school) => (
+            {loadingSchools ? <tr><td colSpan="5" className="p-5">Loading subscriptions...</td></tr> : !schoolError && schools.filter((school) => (!billingStatus || school.subscription_status === billingStatus) && `${school.name} ${school.subdomain}`.toLowerCase().includes(billingQuery.toLowerCase())).map((school) => (
               <tr key={school.id} className="hover:bg-card-soft">
                 <td className="px-5 py-4 font-bold text-main">{school.name}</td>
                 <td className="px-5 py-4">
@@ -556,28 +674,41 @@ function SuperAdminDashboard() {
                   </span>
                 </td>
                 <td className="px-5 py-4 text-muted">{school.max_buses}</td>
-                <td className="px-5 py-4 text-muted">{school.stripe_customer_id || "Not created"}</td>
+                <td className="px-5 py-4 text-muted"><div>{school.stripe_customer_id || "No customer recorded"}</div><div>{school.stripe_subscription_id || "No subscription recorded"}</div></td>
+                <td className="px-5 py-4 text-muted"><div>{school.trial_ends_at ? new Date(school.trial_ends_at).toLocaleDateString() : "No trial end recorded"}</div><div>{school.subscription_ends_at ? new Date(school.subscription_ends_at).toLocaleDateString() : "No subscription end recorded"}</div></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </PanelCard>
+      </PanelCard>
+      {!loadingSchools && !schoolError && !schools.some((school) => (!billingStatus || school.subscription_status === billingStatus) && `${school.name} ${school.subdomain}`.toLowerCase().includes(billingQuery.toLowerCase())) && <p>No subscriptions found.</p>}
+    </section>
   );
 
   const renderAudit = () => (
     <section className="space-y-4">
+      {auditError && <p role="alert" className="border-l-4 border-rose-600 bg-rose-50 p-3 text-rose-800">{auditError}</p>}
       <PanelCard>
+        <label className="mb-3 block">
+          <span className="text-sm font-semibold text-muted">Severity</span>
+          <select className="app-input mt-1" value={auditFilters.severity} onChange={(event) => setAuditFilters((current) => ({ ...current, severity: event.target.value }))}>
+            <option value="">All severities</option>
+            <option value="info">Info</option>
+            <option value="warning">Warning</option>
+            <option value="critical">Critical</option>
+          </select>
+        </label>
         <div className="grid gap-3 md:grid-cols-5">
-          <input className="app-input" placeholder="Action" value={auditFilters.action} onChange={(event) => setAuditFilters((current) => ({ ...current, action: event.target.value }))} />
-          <input className="app-input" placeholder="School ID" value={auditFilters.school_id} onChange={(event) => setAuditFilters((current) => ({ ...current, school_id: event.target.value }))} />
-          <input className="app-input" placeholder="User ID" value={auditFilters.user_id} onChange={(event) => setAuditFilters((current) => ({ ...current, user_id: event.target.value }))} />
-          <input className="app-input" type="date" value={auditFilters.date_from} onChange={(event) => setAuditFilters((current) => ({ ...current, date_from: event.target.value }))} />
-          <input className="app-input" type="date" value={auditFilters.date_to} onChange={(event) => setAuditFilters((current) => ({ ...current, date_to: event.target.value }))} />
+          <TextInput label="Action" value={auditFilters.action} onChange={(value) => setAuditFilters((current) => ({ ...current, action: value }))} />
+          <label className="text-sm font-semibold text-muted">School<select className="app-input mt-1" value={auditFilters.school_id} onChange={(event) => setAuditFilters((current) => ({ ...current, school_id: event.target.value }))}><option value="">All schools</option>{schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}</select></label>
+          <TextInput label="Actor ID" type="number" min="1" value={auditFilters.user_id} onChange={(value) => setAuditFilters((current) => ({ ...current, user_id: value }))} />
+          <TextInput label="From" type="date" value={auditFilters.date_from} onChange={(value) => setAuditFilters((current) => ({ ...current, date_from: value }))} />
+          <TextInput label="To" type="date" min={auditFilters.date_from || undefined} value={auditFilters.date_to} onChange={(value) => setAuditFilters((current) => ({ ...current, date_to: value }))} />
         </div>
         <div className="mt-3 flex gap-2">
           <ActionButton type="button" onClick={() => fetchAuditLogs(1)}>Apply filters</ActionButton>
-          <ActionButton type="button" variant="secondary" onClick={() => { setAuditFilters(emptyAuditFilters); setTimeout(() => fetchAuditLogs(1), 0); }}>Reset</ActionButton>
+          <ActionButton type="button" variant="secondary" onClick={() => { setAuditFilters(emptyAuditFilters); fetchAuditLogs(1, emptyAuditFilters); }}>Reset</ActionButton>
         </div>
       </PanelCard>
 
@@ -597,7 +728,7 @@ function SuperAdminDashboard() {
             <tbody className="divide-y divide-line">
               {loadingAudit ? (
                 <tr><td colSpan="6" className="px-5 py-12 text-center text-muted">Loading audit logs...</td></tr>
-              ) : auditLogs.length === 0 ? (
+              ) : auditError ? null : auditLogs.length === 0 ? (
                 <tr><td colSpan="6" className="px-5 py-12 text-center text-muted">No audit logs found.</td></tr>
               ) : (
                 auditLogs.map((log) => (
@@ -605,8 +736,8 @@ function SuperAdminDashboard() {
                     <td className="px-5 py-4 text-muted">{new Date(log.created_at).toLocaleString()}</td>
                     <td className="px-5 py-4"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${severityClass(log.severity)}`}>{log.severity}</span></td>
                     <td className="px-5 py-4 font-mono text-xs text-main">{log.action}</td>
-                    <td className="max-w-xl px-5 py-4 text-main">{log.description}</td>
-                    <td className="px-5 py-4 text-muted">{log.user?.email || "System"}</td>
+                    <td className="max-w-xl px-5 py-4 text-main">{log.description}<details className="mt-2"><summary className="cursor-pointer font-semibold">Details</summary><dl className="mt-2 break-all text-xs"><dt>IP address</dt><dd>{log.ip_address || "Not recorded"}</dd><dt>User agent</dt><dd>{log.user_agent || "Not recorded"}</dd></dl><pre className="mt-2 max-w-sm whitespace-pre-wrap break-all text-xs">{JSON.stringify({ before: log.old_values, after: log.new_values }, null, 2)}</pre></details></td>
+                    <td className="px-5 py-4 text-muted">{log.user?.email || (log.user_id ? `Deleted/unavailable actor #${log.user_id}` : "System")}</td>
                     <td className="px-5 py-4 text-muted">{log.school?.name || "-"}</td>
                   </tr>
                 ))
@@ -617,8 +748,8 @@ function SuperAdminDashboard() {
         <div className="flex items-center justify-between border-t border-line px-5 py-3 text-sm text-muted">
           <span>Page {auditMeta.current_page} of {auditMeta.last_page} · {auditMeta.total} logs</span>
           <div className="flex gap-2">
-            <button disabled={auditMeta.current_page <= 1} onClick={() => fetchAuditLogs(auditMeta.current_page - 1)} className="rounded-full border border-line bg-white px-3 py-1.5 font-semibold disabled:opacity-40">Previous</button>
-            <button disabled={auditMeta.current_page >= auditMeta.last_page} onClick={() => fetchAuditLogs(auditMeta.current_page + 1)} className="rounded-full border border-line bg-white px-3 py-1.5 font-semibold disabled:opacity-40">Next</button>
+            <button disabled={loadingAudit || !!auditError || auditMeta.current_page <= 1} onClick={() => fetchAuditLogs(auditMeta.current_page - 1, appliedAuditFilters.current)} className="rounded-full border border-line bg-white px-3 py-1.5 font-semibold disabled:opacity-40">Previous</button>
+            <button disabled={loadingAudit || !!auditError || auditMeta.current_page >= auditMeta.last_page} onClick={() => fetchAuditLogs(auditMeta.current_page + 1, appliedAuditFilters.current)} className="rounded-full border border-line bg-white px-3 py-1.5 font-semibold disabled:opacity-40">Next</button>
           </div>
         </div>
       </PanelCard>
@@ -627,12 +758,17 @@ function SuperAdminDashboard() {
 
   const renderUsers = () => (
     <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <SectionHeader eyebrow="Access" title="Admin accounts" description="View and update every school admin account, including access status and credentials." />
+      {adminError && <p role="alert" className="border-l-4 border-rose-600 bg-rose-50 p-3 text-rose-800">{adminError}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionHeader eyebrow="Access" title="School administrators" />
         <ActionButton type="button" variant="secondary" onClick={fetchAdmins}>
           <FiRefreshCw /> Refresh
         </ActionButton>
+        <ActionButton type="button" onClick={() => openAdminModal(null)}>
+          <FiUserPlus /> Add Admin
+        </ActionButton>
       </div>
+      <input aria-label="Search administrators" className="app-input sm:max-w-sm" placeholder="Search name, email or school" value={adminQuery} onChange={(event) => setAdminQuery(event.target.value)} />
 
       <PanelCard className="overflow-hidden p-0">
         <div className="overflow-x-auto">
@@ -650,10 +786,10 @@ function SuperAdminDashboard() {
             <tbody className="divide-y divide-line">
               {loadingAdmins ? (
                 <tr><td colSpan="6" className="px-5 py-12 text-center text-muted">Loading admins...</td></tr>
-              ) : admins.length === 0 ? (
+              ) : adminError ? null : admins.filter((admin) => `${admin.name} ${admin.email} ${admin.school?.name || ""}`.toLowerCase().includes(adminQuery.toLowerCase())).length === 0 ? (
                 <tr><td colSpan="6" className="px-5 py-12 text-center text-muted">No admin accounts found.</td></tr>
               ) : (
-                admins.map((admin) => (
+                admins.filter((admin) => `${admin.name} ${admin.email} ${admin.school?.name || ""}`.toLowerCase().includes(adminQuery.toLowerCase())).map((admin) => (
                   <tr key={admin.id} className="hover:bg-card-soft">
                     <td className="px-5 py-4 font-bold text-main">{admin.name}</td>
                     <td className="px-5 py-4 text-muted">{admin.email}</td>
@@ -668,6 +804,9 @@ function SuperAdminDashboard() {
                       <button type="button" onClick={() => openEditAdmin(admin)} className="inline-flex h-9 items-center gap-2 rounded-full border border-line bg-white px-3 text-sm font-semibold text-main hover:bg-accent-soft">
                         <FiEdit2 /> Edit
                       </button>
+                        <button type="button" onClick={() => deleteAdmin(admin)} aria-label={`Delete ${admin.name}`} className="inline-flex h-9 items-center gap-2 rounded-full border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50">
+                          <FiX /> Delete
+                        </button>
                     </td>
                   </tr>
                 ))
@@ -679,10 +818,17 @@ function SuperAdminDashboard() {
     </section>
   );
 
-  const renderPlaceholder = (title, body) => (
-    <PanelCard>
-      <SectionHeader eyebrow="Coming next" title={title} description={body} />
-    </PanelCard>
+  const renderSettings = () => (
+    <section className="max-w-xl space-y-6">
+      <SuperAdminAccount key="settings" onSaved={(account) => setAccountName(account.name)} />
+      <label className="block">
+        <span className="text-sm font-semibold text-muted">Application language</span>
+        <select className="app-input mt-1" value={lang} onChange={(event) => setLang(event.target.value)}>
+          <option value="fr">Francais</option>
+          <option value="ar">Arabic</option>
+        </select>
+      </label>
+    </section>
   );
 
   const viewTitle = navItems.find((item) => item.id === activeView)?.label || "Dashboard";
@@ -733,7 +879,7 @@ function SuperAdminDashboard() {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="rounded-full border border-line bg-card-soft px-4 py-2 text-sm font-bold text-main">
-                {user?.name || "Super Admin"}
+                {accountName || user?.name || "Super Admin"}
               </span>
               <button type="button" onClick={signOut} className="rounded-full border border-line bg-white px-4 py-2 text-sm font-bold text-muted hover:bg-rose-50 hover:text-rose-600">
                 Sign out
@@ -743,19 +889,20 @@ function SuperAdminDashboard() {
         </header>
 
         <section className="px-4 py-6 sm:px-6 lg:px-8">
+          {schoolError && ["dashboard", "schools", "billing"].includes(activeView) && <div role="alert" className="mb-4 border-l-4 border-rose-600 bg-rose-50 p-3 text-rose-800">{schoolError}<button className="ml-3 underline" onClick={fetchSchools}>Retry</button></div>}
           {activeView === "dashboard" ? renderDashboard() : null}
           {activeView === "schools" ? renderSchools() : null}
           {activeView === "billing" ? renderBilling() : null}
           {activeView === "audit" ? renderAudit() : null}
           {activeView === "users" ? renderUsers() : null}
-          {activeView === "security" ? renderPlaceholder("Security Center", "Next step: show login events, failed logins, suspicious audit entries, and later enforce 2FA for Super Admin accounts.") : null}
-          {activeView === "settings" ? renderPlaceholder("Settings", "Keep this limited for MVP: system name, logo, support email, and safe non-secret configuration.") : null}
+          {activeView === "security" ? <div className="space-y-8"><SuperAdminAccount key="security" security /><h2 className="text-lg font-bold">Security audit records</h2>{renderAudit()}</div> : null}
+          {activeView === "settings" ? renderSettings() : null}
         </section>
       </div>
 
       {schoolModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6">
-          <form onSubmit={handleSchoolSubmit} className="app-panel w-full max-w-lg p-6">
+          <form role="dialog" aria-label="School" aria-modal="true" onSubmit={handleSchoolSubmit} className="app-panel max-h-[90dvh] overflow-y-auto w-full max-w-lg p-6">
             <ModalHeader title={editingSchool ? "Edit School" : "Add New School"} subtitle="Manage school tenancy and limits." onClose={closeSchoolModal} />
             <div className="space-y-4">
               <TextInput label="Name" value={schoolForm.name} onChange={(value) => setSchoolForm((current) => ({ ...current, name: value }))} required />
@@ -775,9 +922,16 @@ function SuperAdminDashboard() {
 
       {adminModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6">
-          <form onSubmit={handleAdminSubmit} className="app-panel w-full max-w-lg p-6">
+          <form role="dialog" aria-label="Create admin" aria-modal="true" onSubmit={handleAdminSubmit} className="app-panel max-h-[90dvh] overflow-y-auto w-full max-w-lg p-6">
             <ModalHeader title="Create School Admin" subtitle={adminSchool ? `Create an admin account for ${adminSchool.name}.` : "Create an admin account."} onClose={closeAdminModal} />
             <div className="grid gap-4">
+              <label className="block">
+                <span className="text-sm font-semibold text-muted">School</span>
+                <select required className="app-input mt-1" value={adminSchool?.id || ""} onChange={(event) => setAdminSchool(schools.find((school) => String(school.id) === event.target.value) || null)}>
+                  <option value="" disabled>Select school</option>
+                  {schools.map((school) => <option key={school.id} value={school.id}>{school.name}</option>)}
+                </select>
+              </label>
               <TextInput label="Name" value={adminForm.name} onChange={(value) => setAdminForm((current) => ({ ...current, name: value }))} required />
               <TextInput label="Email" type="email" value={adminForm.email} onChange={(value) => setAdminForm((current) => ({ ...current, email: value }))} required />
               <TextInput label="Phone" value={adminForm.phone} onChange={(value) => setAdminForm((current) => ({ ...current, phone: value }))} />
@@ -790,7 +944,7 @@ function SuperAdminDashboard() {
 
       {adminProfileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6">
-          <form onSubmit={handleAdminProfileSubmit} className="app-panel w-full max-w-xl p-6">
+          <form role="dialog" aria-label="Edit admin" aria-modal="true" onSubmit={handleAdminProfileSubmit} className="app-panel max-h-[90dvh] overflow-y-auto w-full max-w-xl p-6">
             <ModalHeader title="Edit Admin Access" subtitle={editingAdmin ? `Manage ${editingAdmin.name}'s login and school access.` : "Manage admin access."} onClose={closeAdminProfileModal} />
             <div className="grid gap-4 md:grid-cols-2">
               <TextInput label="Name" value={adminProfileForm.name} onChange={(value) => setAdminProfileForm((current) => ({ ...current, name: value }))} required />
@@ -813,7 +967,7 @@ function SuperAdminDashboard() {
               <label className="block md:col-span-2">
                 <span className="text-sm font-semibold text-muted">School</span>
                 <select value={adminProfileForm.school_id} onChange={(event) => setAdminProfileForm((current) => ({ ...current, school_id: event.target.value }))} className="app-input mt-1">
-                  <option value="">Unassigned</option>
+                  <option value="" disabled>Select school</option>
                   {schools.map((school) => (
                     <option key={school.id} value={String(school.id)}>{school.name}</option>
                   ))}
@@ -839,7 +993,7 @@ function ModalHeader({ title, subtitle, onClose }) {
         <h2 className="text-2xl font-extrabold text-main">{title}</h2>
         <p className="mt-1 text-sm text-muted">{subtitle}</p>
       </div>
-      <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-line bg-white text-muted hover:bg-accent-soft hover:text-main">
+      <button type="button" aria-label="Close dialog" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-line bg-white text-muted hover:bg-accent-soft hover:text-main">
         <FiX />
       </button>
     </div>

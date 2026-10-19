@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Exceptions\FirebaseRequestException;
 use App\Models\Bus;
 use App\Models\Notification;
 use App\Models\Presence;
@@ -15,11 +16,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class TripController extends Controller
 {
-    public function start(Request $request, NotificationBroadcaster $broadcaster, FirebaseService $firebase, AdminNotificationRecipients $adminRecipients): JsonResponse
+    public function start(Request $request, NotificationBroadcaster $broadcaster, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
         $schoolId = (int) $request->user()->school_id;
 
@@ -29,19 +31,22 @@ class TripController extends Controller
         ]);
 
         $driver = $request->user();
-        $bus = Bus::query()
-            ->where('school_id', $schoolId)
-            ->with(['students.parent', 'activeTrip'])
-            ->where('id', $validated['busId'])
-            ->where('driver_id', $driver->id)
-            ->firstOrFail();
+        [$bus, $trip, $staleActiveTrip] = DB::transaction(function () use ($schoolId, $validated, $driver) {
+            $bus = Bus::query()
+                ->where('school_id', $schoolId)
+                ->where('id', $validated['busId'])
+                ->where('driver_id', $driver->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        // Force-complete any stale active trip so a fresh one can be created
-        if ($bus->activeTrip) {
-            $bus->activeTrip->update(['status' => 'completed', 'completed_at' => now()]);
-        }
+            $bus->load(['students.parent', 'activeTrip']);
+            $staleActiveTrip = $bus->activeTrip;
 
-        $trip = DB::transaction(function () use ($bus, $driver, $validated) {
+            // Force-complete any active trip so a fresh one can be created.
+            if ($staleActiveTrip) {
+                $staleActiveTrip->update(['status' => 'completed', 'completed_at' => now()]);
+            }
+
             // Reset all students to waiting before starting a new trip
             $bus->students()->update(['status' => 'waiting']);
 
@@ -68,7 +73,7 @@ class TripController extends Controller
                 DB::table('presences')->insert($presenceRows);
             }
 
-            return $trip;
+            return [$bus, $trip, $staleActiveTrip];
         });
 
         $notifications = [];
@@ -124,23 +129,25 @@ class TripController extends Controller
             ];
         }
 
-        if (!empty($notifications)) {
-            Notification::insert($notifications);
+        $this->createAndBroadcastNotifications($notifications, $broadcaster);
+
+        if ($staleActiveTrip) {
+            $this->projectRealtime('trip_stale_completed', [
+                'trip_id' => (int) $staleActiveTrip->id,
+                'bus_id' => (int) $bus->id,
+                'school_id' => (int) $bus->school_id,
+            ], fn (FirebaseService $firebase) => $firebase->completeTrip(
+                (int) $bus->id,
+                (int) $staleActiveTrip->id,
+                (int) $bus->school_id
+            ));
         }
 
-        // Realtime Firebase update
-        $firebase->updateBusLocation((int) $bus->id, [
-            'trip_id' => (string) $trip->id,
-            'school_id' => (string) $bus->school_id,
-            'bus_id' => (string) $bus->id,
-            'bus_name' => $bus->bus_name,
-            'status' => 'in_progress',
-            'type' => $trip->type,
-            'live_location' => [
-                'lat' => (float) $bus->latitude_actuelle,
-                'lng' => (float) $bus->longitude_actuelle,
-            ],
-        ]);
+        $this->projectRealtime('trip_started', [
+            'trip_id' => (int) $trip->id,
+            'bus_id' => (int) $bus->id,
+            'school_id' => (int) $bus->school_id,
+        ], fn (FirebaseService $firebase) => $firebase->projectTripStarted($trip));
 
         return response()->json([
             'message' => 'Trip started.',
@@ -155,7 +162,7 @@ class TripController extends Controller
         ], 201);
     }
 
-    public function finalize(Request $request, Trip $trip, NotificationBroadcaster $broadcaster, FirebaseService $firebase, AdminNotificationRecipients $adminRecipients): JsonResponse
+    public function finalize(Request $request, Trip $trip, NotificationBroadcaster $broadcaster, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
         $schoolId = (int) $request->user()->school_id;
 
@@ -165,8 +172,8 @@ class TripController extends Controller
             'attendance.*.status' => ['required', Rule::in(['waiting', 'mounted', 'absent', 'dropped'])],
             'attendance.*.recorded_at' => ['nullable', 'date'],
             'final_location' => ['nullable', 'array'],
-            'final_location.lat' => ['required_with:final_location', 'numeric'],
-            'final_location.lng' => ['required_with:final_location', 'numeric'],
+            'final_location.lat' => ['required_with:final_location', 'numeric', 'between:-90,90'],
+            'final_location.lng' => ['required_with:final_location', 'numeric', 'between:-180,180'],
         ]);
 
         $driver = $request->user();
@@ -174,6 +181,10 @@ class TripController extends Controller
 
         if ((int) $trip->driver_id !== (int) $driver->id) {
             return response()->json(['message' => 'You are not allowed to finalize this trip.'], 403);
+        }
+
+        if ($trip->status !== 'in_progress') {
+            return response()->json(['message' => 'This trip is not active.'], 409);
         }
 
         $attendanceRows = collect($validated['attendance'])
@@ -291,12 +302,17 @@ class TripController extends Controller
             ];
         }
 
-        if (!empty($notifications)) {
-            Notification::insert($notifications);
-        }
+        $this->createAndBroadcastNotifications($notifications, $broadcaster);
 
-        // Realtime Firebase update: Remove active trip
-        $firebase->completeTrip((int) $trip->bus_id);
+        $this->projectRealtime('trip_finalized', [
+            'trip_id' => (int) $trip->id,
+            'bus_id' => (int) $trip->bus_id,
+            'school_id' => (int) $trip->school_id,
+        ], fn (FirebaseService $firebase) => $firebase->completeTrip(
+            (int) $trip->bus_id,
+            (int) $trip->id,
+            (int) $trip->school_id
+        ));
 
         return response()->json([
             'message' => 'Trip finalized.',
@@ -305,7 +321,7 @@ class TripController extends Controller
         ]);
     }
 
-    public function pingLocation(Request $request, NotificationBroadcaster $broadcaster, FirebaseService $firebase): JsonResponse
+    public function pingLocation(Request $request, NotificationBroadcaster $broadcaster): JsonResponse
     {
         $schoolId = (int) $request->user()->school_id;
 
@@ -331,14 +347,15 @@ class TripController extends Controller
             'longitude_actuelle' => $validated['longitude'],
         ]);
 
-        // Realtime Firebase update: Only update location to minimize payload
-        $firebase->updateBusLocation((int) $trip->bus_id, [
-            'school_id' => (string) $trip->school_id,
-            'live_location' => [
-                'lat' => (float) $validated['latitude'],
-                'lng' => (float) $validated['longitude'],
-            ],
-        ]);
+        $this->projectRealtime('trip_location_updated', [
+            'trip_id' => (int) $trip->id,
+            'bus_id' => (int) $trip->bus_id,
+            'school_id' => (int) $trip->school_id,
+        ], fn (FirebaseService $firebase) => $firebase->updateTripLocation(
+            $trip,
+            (float) $validated['latitude'],
+            (float) $validated['longitude']
+        ));
 
         $alerts = [];
 
@@ -528,8 +545,33 @@ class TripController extends Controller
         }
     }
 
+    private function createAndBroadcastNotifications(array $notifications, NotificationBroadcaster $broadcaster): void
+    {
+        foreach ($notifications as $notificationData) {
+            if (isset($notificationData['payload']) && is_string($notificationData['payload'])) {
+                $notificationData['payload'] = json_decode($notificationData['payload'], true) ?: [];
+            }
+
+            unset($notificationData['created_at'], $notificationData['updated_at']);
+
+            $notification = Notification::create($notificationData);
+            $broadcaster->broadcast($notification);
+        }
+    }
+
     private function tenantExists(string $table, int $schoolId, string $column = 'id'): \Illuminate\Validation\Rules\Exists
     {
         return Rule::exists($table, $column)->where(fn ($query) => $query->where('school_id', $schoolId));
+    }
+
+    private function projectRealtime(string $event, array $context, callable $callback): void
+    {
+        try {
+            $callback(app(FirebaseService::class));
+        } catch (FirebaseRequestException $exception) {
+            Log::warning("Firebase realtime projection failed: {$event}", $context + [
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

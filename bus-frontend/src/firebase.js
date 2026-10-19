@@ -20,6 +20,7 @@ if (missingFirebaseKeys.length > 0) {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 export const auth = getAuth(app);
+export { onAuthStateChanged, signInWithCustomToken, signOut };
 
 let startedConnectionManager = false;
 

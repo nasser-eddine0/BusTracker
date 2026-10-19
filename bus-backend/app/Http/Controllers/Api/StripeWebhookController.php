@@ -52,7 +52,17 @@ class StripeWebhookController extends Controller
         ]);
 
         if ($inserted === 0) {
-            return response()->json(['received' => true, 'duplicate' => true]);
+            $reclaimed = DB::table('stripe_webhook_logs')
+                ->where('stripe_event_id', $eventId)
+                ->where('status', 'failed')
+                ->update([
+                    'status' => 'processing',
+                    'updated_at' => now(),
+                ]);
+
+            if ($reclaimed === 0) {
+                return response()->json(['received' => true, 'duplicate' => true]);
+            }
         }
 
         try {

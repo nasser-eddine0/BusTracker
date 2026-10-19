@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { FiMessageSquare, FiX, FiSend, FiRefreshCw, FiCpu, FiShield } from "react-icons/fi";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { sendChatMessage } from "../api/chat";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContextObject";
 
 const starterPrompts = [
   "Résume les actions prioritaires pour aujourd'hui.",

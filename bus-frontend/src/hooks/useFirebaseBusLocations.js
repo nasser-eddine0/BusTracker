@@ -5,11 +5,10 @@ import { useAuth } from "../context/AuthContextObject";
 
 export default function useFirebaseBusLocations() {
   const { schoolId } = useAuth();
-  const [locations, setLocations] = useState({});
+  const [snapshot, setSnapshot] = useState({ schoolId: null, value: {} });
 
   useEffect(() => {
     if (!schoolId) {
-      setLocations({});
       return undefined;
     }
 
@@ -22,11 +21,11 @@ export default function useFirebaseBusLocations() {
         return accumulator;
       }, {});
 
-      setLocations(nextLocations);
+      setSnapshot({ schoolId, value: nextLocations });
     });
 
     return () => unsubscribe();
   }, [schoolId]);
 
-  return locations;
+  return snapshot.schoolId === schoolId ? snapshot.value : {};
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Exceptions\FirebaseRequestException;
 use App\Models\Bus;
 use App\Models\Notification;
 use App\Models\Presence;
@@ -13,7 +14,7 @@ use App\Services\FirebaseService;
 use App\Services\NotificationBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class DriverController extends Controller
@@ -29,20 +30,6 @@ class DriverController extends Controller
             ->where('driver_id', $driver->id)
             ->first();
         $latestTrip = $bus?->trips()->latest('trip_date')->latest('id')->first();
-
-        // Only clean up STALE trips from previous days — NOT today's active trip.
-        // This preserves the trip if the driver navigates within the app.
-        if ($bus && $bus->activeTrip && $bus->activeTrip->trip_date !== now()->toDateString()) {
-            $bus->activeTrip->update(['status' => 'completed', 'completed_at' => now()]);
-            $bus->update([
-                'trip_status' => 'idle',
-                'trip_started_at' => null,
-                'trip_completed_at' => now(),
-            ]);
-            $bus->students()->whereIn('status', ['mounted', 'absent', 'in_bus', 'dropped'])->update(['status' => 'waiting']);
-            $bus->refresh();
-            $bus->load(['students.parent', 'activeTrip']);
-        }
 
         // If there is no active trip and the last trip is from a previous day, reset old statuses.
         // Keep today's completed statuses (e.g. dropped at school) visible until a new trip starts.
@@ -141,7 +128,7 @@ class DriverController extends Controller
         return response()->json(['message' => 'Trip started.']);
     }
 
-    public function updateStudentStatus(Request $request, Student $student, NotificationBroadcaster $broadcaster, FirebaseService $firebase, AdminNotificationRecipients $adminRecipients): JsonResponse
+    public function updateStudentStatus(Request $request, Student $student, NotificationBroadcaster $broadcaster, AdminNotificationRecipients $adminRecipients): JsonResponse
     {
         $schoolId = (int) $request->user()->school_id;
 
@@ -166,6 +153,7 @@ class DriverController extends Controller
         $trip = Trip::query()
             ->where('school_id', $schoolId)
             ->where('bus_id', $bus->id)
+            ->where('status', 'in_progress')
             ->whereDate('trip_date', now()->toDateString())
             ->latest('id')
             ->first();
@@ -184,8 +172,11 @@ class DriverController extends Controller
             );
         }
 
-        // Realtime Firebase update
-        $firebase->updateStudentStatus((int) $student->id, $validated['status']);
+        $this->projectRealtime('student_status_updated', [
+            'student_id' => (int) $student->id,
+            'trip_id' => $trip?->id ? (int) $trip->id : null,
+            'school_id' => (int) $schoolId,
+        ], fn (FirebaseService $firebase) => $firebase->updateStudentStatus((int) $student->id, $validated['status'], $trip));
 
         $statusLabels = ['mounted' => 'got on the bus', 'in_bus' => 'got on the bus', 'absent' => 'is absent today'];
         $statusLabel = $statusLabels[$validated['status']] ?? $validated['status'];
@@ -217,88 +208,6 @@ class DriverController extends Controller
         );
 
         return response()->json(['message' => 'Student status updated.']);
-    }
-
-    public function dropStudents(Request $request, NotificationBroadcaster $broadcaster, AdminNotificationRecipients $adminRecipients): JsonResponse
-    {
-        $schoolId = (int) $request->user()->school_id;
-
-        $validated = $request->validate([
-            'busId' => ['required', 'integer', $this->tenantExists('buses', $schoolId)],
-        ]);
-
-        $driver = $request->user();
-        $bus = Bus::query()
-            ->where('school_id', $schoolId)
-            ->with('students.parent')
-            ->where('id', $validated['busId'])
-            ->where('driver_id', $driver->id)
-            ->firstOrFail();
-        $trip = Trip::query()
-            ->where('school_id', $schoolId)
-            ->where('bus_id', $bus->id)
-            ->whereDate('trip_date', now()->toDateString())
-            ->latest('id')
-            ->first();
-
-        DB::transaction(function () use ($bus, $trip, $driver, $broadcaster) {
-            foreach ($bus->students->where('status', 'mounted') as $student) {
-                $student->update(['status' => 'dropped']);
-
-                if ($trip) {
-                    Presence::updateOrCreate(
-                        [
-                            'student_id' => $student->id,
-                            'trip_id' => $trip->id,
-                        ],
-                        [
-                            'school_id' => $bus->school_id,
-                            'status' => 'dropped',
-                            'recorded_at' => now(),
-                        ]
-                    );
-                }
-
-                $this->createParentNotification(
-                    $student,
-                    $bus,
-                    $trip,
-                    $driver->id,
-                    'dropped',
-                    'Drop-off completed',
-                    "{$student->full_name} has been dropped off.",
-                    $broadcaster
-                );
-            }
-
-            $bus->update([
-                'trip_status' => 'completed',
-                'trip_completed_at' => now(),
-            ]);
-
-            if ($trip) {
-                $trip->update([
-                    'status' => 'completed',
-                    'completed_at' => now(),
-                ]);
-            }
-        });
-
-        $this->createAdminNotifications(
-            (int) $bus->school_id,
-            $driver->id,
-            'trip_completed',
-            'Trajet termine',
-            "{$bus->bus_name} a termine la tournee et le depot des eleves.",
-            [
-                'busName' => $bus->bus_name,
-                'driverName' => $driver->name,
-            ],
-            $broadcaster,
-            $adminRecipients
-        );
-
-        return response()->json(['message' => 'Drop-off completed.']);
     }
 
     private function createParentNotification(
@@ -434,5 +343,16 @@ class DriverController extends Controller
     private function tenantExists(string $table, int $schoolId, string $column = 'id'): \Illuminate\Validation\Rules\Exists
     {
         return Rule::exists($table, $column)->where(fn ($query) => $query->where('school_id', $schoolId));
+    }
+
+    private function projectRealtime(string $event, array $context, callable $callback): void
+    {
+        try {
+            $callback(app(FirebaseService::class));
+        } catch (FirebaseRequestException $exception) {
+            Log::warning("Firebase realtime projection failed: {$event}", $context + [
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

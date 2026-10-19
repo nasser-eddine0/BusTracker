@@ -3,20 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Imports\HeadersOnlyImport;
+use App\Imports\StudentsImport;
 use App\Models\Bus;
 use App\Models\Notification;
 use App\Models\Student;
 use App\Models\Trip;
 use App\Models\User;
+use App\Services\FirebaseMembershipSynchronizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 use Maatwebsite\Excel\Facades\Excel;
-use App\Imports\StudentsImport;
-use App\Imports\HeadersOnlyImport;
-use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
@@ -24,7 +26,7 @@ class AdminController extends Controller
     {
         $admin = request()->user();
         $schoolId = (int) $admin->school_id;
-        
+
         // Use select to reduce payload size and eager load only necessary relations
         $users = User::query()
             ->where('school_id', $schoolId)
@@ -79,6 +81,10 @@ class AdminController extends Controller
             'busId' => ['nullable', 'integer', $this->tenantExists('buses', $schoolId)],
         ]);
 
+        $displacedDriverId = ! empty($validated['busId'])
+            ? Bus::query()->where('school_id', $schoolId)->where('id', $validated['busId'])->value('driver_id')
+            : null;
+
         $user = DB::transaction(function () use ($validated, $schoolId) {
             $user = User::create([
                 'school_id' => $schoolId,
@@ -91,12 +97,21 @@ class AdminController extends Controller
                 'cin' => $validated['cin'] ?? null,
             ]);
 
-            if ($user->role === 'driver') {
+            if ($user->role === 'driver' && $user->status === 'active') {
                 $this->syncDriverBus($user, $validated['busId'] ?? null, $schoolId);
             }
 
+            app(FirebaseMembershipSynchronizer::class)->enqueue($user);
+
             return $user;
         });
+
+        if ($displacedDriverId && (int) $displacedDriverId !== (int) $user->id) {
+            $displacedDriver = User::query()->where('school_id', $schoolId)->find($displacedDriverId);
+            if ($displacedDriver) {
+                $this->syncFirebaseMembership($displacedDriver->loadMissing('drivenBus'));
+            }
+        }
 
         return response()->json([
             'message' => 'User created.',
@@ -118,6 +133,10 @@ class AdminController extends Controller
             'busId' => ['nullable', 'integer', $this->tenantExists('buses', $schoolId)],
         ]);
 
+        $displacedDriverId = ! empty($validated['busId'])
+            ? Bus::query()->where('school_id', $schoolId)->where('id', $validated['busId'])->value('driver_id')
+            : null;
+
         DB::transaction(function () use ($validated, $user, $schoolId) {
             $user->fill([
                 'name' => $validated['name'],
@@ -127,7 +146,7 @@ class AdminController extends Controller
                 'cin' => $validated['cin'] ?? null,
             ]);
 
-            if (!empty($validated['password'])) {
+            if (! empty($validated['password'])) {
                 $user->password = $validated['password'];
             }
 
@@ -140,7 +159,16 @@ class AdminController extends Controller
             if ($user->role !== 'driver') {
                 Bus::query()->where('school_id', $schoolId)->where('driver_id', $user->id)->update(['driver_id' => null]);
             }
+
+            app(FirebaseMembershipSynchronizer::class)->enqueue($user);
         });
+
+        if ($displacedDriverId && (int) $displacedDriverId !== (int) $user->id) {
+            $displacedDriver = User::query()->where('school_id', $schoolId)->find($displacedDriverId);
+            if ($displacedDriver) {
+                $this->syncFirebaseMembership($displacedDriver->loadMissing('drivenBus'));
+            }
+        }
 
         return response()->json([
             'message' => 'User updated.',
@@ -158,6 +186,8 @@ class AdminController extends Controller
             if ($user->role === 'driver') {
                 Bus::query()->where('school_id', $schoolId)->where('driver_id', $user->id)->update(['driver_id' => null]);
             }
+
+            app(FirebaseMembershipSynchronizer::class)->enqueue($user, $schoolId, false);
         });
 
         return response()->json(['message' => 'User disabled.']);
@@ -176,6 +206,8 @@ class AdminController extends Controller
                 Student::query()->where('school_id', $schoolId)->where('parent_id', $user->id)->update(['parent_id' => null]);
             }
 
+            app(FirebaseMembershipSynchronizer::class)->enqueue($user, $schoolId, false);
+
             $user->delete();
         });
 
@@ -186,6 +218,12 @@ class AdminController extends Controller
     {
         $schoolId = $this->tenantSchoolId($request);
         $validated = $this->validateStudent($request);
+
+        if (! $this->busHasCapacityForStudent($schoolId, $validated['busId'] ?? null)) {
+            return response()->json([
+                'message' => 'Bus capacity would be exceeded.',
+            ], 422);
+        }
 
         $student = Student::create([
             'school_id' => $schoolId,
@@ -203,6 +241,8 @@ class AdminController extends Controller
             'status' => 'waiting',
         ]);
 
+        $this->syncParentMemberships($schoolId, [$student->parent_id]);
+
         return response()->json([
             'message' => 'Student created.',
             'student' => $this->serializeStudent($student->fresh(['parent', 'bus'])),
@@ -211,8 +251,16 @@ class AdminController extends Controller
 
     public function updateStudent(Request $request, Student $student): JsonResponse
     {
+        $schoolId = $this->tenantSchoolId($request);
         $validated = $this->validateStudent($request, $student);
 
+        if (! $this->busHasCapacityForStudent($schoolId, $validated['busId'] ?? null, $student)) {
+            return response()->json([
+                'message' => 'Bus capacity would be exceeded.',
+            ], 422);
+        }
+
+        $previousParentId = $student->parent_id;
         $student->update([
             'full_name' => $validated['name'],
             'grade' => $validated['grade'],
@@ -227,6 +275,8 @@ class AdminController extends Controller
             'location_conformee' => $validated['locationConformee'] ?? $student->location_conformee,
         ]);
 
+        $this->syncParentMemberships($schoolId, [$previousParentId, $student->parent_id]);
+
         return response()->json([
             'message' => 'Student updated.',
             'student' => $this->serializeStudent($student->fresh(['parent', 'bus'])),
@@ -236,6 +286,8 @@ class AdminController extends Controller
     public function destroyStudent(Request $request, Student $student): JsonResponse
     {
         $student->delete();
+        $this->syncParentMemberships($this->tenantSchoolId($request), [$student->parent_id]);
+
         return response()->json(['message' => 'Student deleted.']);
     }
 
@@ -245,10 +297,13 @@ class AdminController extends Controller
 
         $validated = $request->validate([
             'studentIds' => ['required', 'array'],
-            'studentIds.*' => ['integer', $this->tenantExists('students', $schoolId)]
+            'studentIds.*' => ['integer', $this->tenantExists('students', $schoolId)],
         ]);
 
+        $parentIds = Student::where('school_id', $schoolId)
+            ->whereIn('id', $validated['studentIds'])->pluck('parent_id')->all();
         Student::where('school_id', $schoolId)->whereIn('id', $validated['studentIds'])->delete();
+        $this->syncParentMemberships($schoolId, $parentIds);
 
         return response()->json(['message' => 'Students deleted.']);
     }
@@ -273,7 +328,7 @@ class AdminController extends Controller
                 $parent = User::firstOrCreate(
                     [
                         'school_id' => $schoolId,
-                        'email' => strtolower($row['parentEmail'])
+                        'email' => strtolower($row['parentEmail']),
                     ],
                     [
                         'name' => $row['parentName'],
@@ -303,19 +358,27 @@ class AdminController extends Controller
 
     public function parseImportHeaders(Request $request): JsonResponse
     {
+        $schoolId = $this->tenantSchoolId($request);
+
         $request->validate([
             'file' => ['required', 'mimes:xlsx,csv,xls', 'max:10240'],
         ]);
 
         // Store the file temporarily
-        $path = $request->file('file')->store('temp', 'local');
+        $path = $request->file('file')->store("temp/imports/{$schoolId}", 'local');
 
         // Extract headers using the lightweight HeadersOnlyImport
-        $import = new HeadersOnlyImport();
-        Excel::import($import, $path, 'local');
+        $import = new HeadersOnlyImport;
+        try {
+            Excel::import($import, $path, 'local');
+        } catch (\Throwable $exception) {
+            Storage::disk('local')->delete($path);
+
+            throw $exception;
+        }
 
         return response()->json([
-            'headers'             => $import->getHeaders(),
+            'headers' => $import->getHeaders(),
             'temporary_file_path' => $path,
         ]);
     }
@@ -324,19 +387,24 @@ class AdminController extends Controller
     {
         $validated = $request->validate([
             'temporary_file_path' => ['required', 'string'],
-            'mapping'             => ['required', 'array'],
+            'mapping' => ['required', 'array'],
             'mapping.student_name' => ['required', 'string'],
-            'mapping.parent_cin'   => ['required', 'string'],
-            'mapping.*'            => ['nullable', 'string'],
+            'mapping.parent_cin' => ['required', 'string'],
+            'mapping.*' => ['nullable', 'string'],
         ]);
 
         $path = $validated['temporary_file_path'];
+        $schoolId = $this->tenantSchoolId($request);
+        $path = str_replace('\\', '/', $path);
+        $expectedPrefix = "temp/imports/{$schoolId}/";
 
-        if (!Storage::disk('local')->exists($path)) {
-            return response()->json(['message' => 'Temporary file not found. Please re-upload.'], 422);
+        if (! str_starts_with($path, $expectedPrefix) || str_contains($path, '..')) {
+            return response()->json(['message' => 'Invalid temporary import path. Please re-upload.'], 422);
         }
 
-        $schoolId = $this->tenantSchoolId($request);
+        if (! Storage::disk('local')->exists($path)) {
+            return response()->json(['message' => 'Temporary file not found. Please re-upload.'], 422);
+        }
 
         // Run the import with the user-defined mapping and school_id
         Excel::import(
@@ -346,7 +414,7 @@ class AdminController extends Controller
         );
 
         // Clean up the temporary file
-        Storage::disk('local')->delete($validated['temporary_file_path']);
+        Storage::disk('local')->delete($path);
 
         return response()->json(['message' => 'Import completed successfully.']);
     }
@@ -361,8 +429,8 @@ class AdminController extends Controller
             'plateNumber' => ['required', 'string', 'max:255', 'unique:buses,plate_number'],
             'capacity' => ['nullable', 'integer', 'min:1'],
             'schoolName' => ['nullable', 'string', 'max:255'],
-            'latitude' => ['nullable', 'numeric'],
-            'longitude' => ['nullable', 'numeric'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
         $bus = Bus::create([
@@ -397,24 +465,46 @@ class AdminController extends Controller
                 'integer',
                 Rule::exists('users', 'id')->where(fn ($query) => $query
                     ->where('role', 'driver')
-                    ->where('school_id', $schoolId)),
+                    ->where('school_id', $schoolId)
+                    ->where('status', 'active')),
             ],
-            'latitude' => ['nullable', 'numeric'],
-            'longitude' => ['nullable', 'numeric'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
-        DB::transaction(function () use ($validated, $bus, $schoolId) {
+        $previousDriverId = $bus->driver_id ? (int) $bus->driver_id : null;
+        $nextDriverId = ! empty($validated['driverId']) ? (int) $validated['driverId'] : null;
+        $nextCapacity = $validated['capacity'] ?? 24;
+
+        $assignedStudentsCount = Student::query()
+            ->where('school_id', $schoolId)
+            ->where('bus_id', $bus->id)
+            ->count();
+
+        if ($nextCapacity < $assignedStudentsCount) {
+            return response()->json([
+                'message' => 'Bus capacity cannot be lower than assigned students.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($validated, $bus, $schoolId, $nextCapacity) {
             $bus->update([
                 'bus_name' => $validated['name'],
                 'route_name' => $validated['routeName'],
                 'plate_number' => $validated['plateNumber'],
-                'capacity' => $validated['capacity'] ?? 24,
+                'capacity' => $nextCapacity,
                 'latitude_actuelle' => $validated['latitude'] ?? null,
                 'longitude_actuelle' => $validated['longitude'] ?? null,
             ]);
 
             $this->assignDriverToBus($bus, $validated['driverId'] ?? null, $schoolId);
         });
+
+        User::query()
+            ->where('school_id', $schoolId)
+            ->whereIn('id', array_values(array_filter([$previousDriverId, $nextDriverId])))
+            ->get()
+            ->each(fn (User $driver) => $this->syncFirebaseMembership($driver->loadMissing('drivenBus')));
 
         return response()->json([
             'message' => 'Bus updated.',
@@ -432,7 +522,7 @@ class AdminController extends Controller
             'busId' => ['nullable', 'integer', $this->tenantExists('buses', $schoolId)],
         ]);
 
-        $bus = !empty($validated['busId']) ? Bus::where('school_id', $schoolId)->withCount('students')->findOrFail($validated['busId']) : null;
+        $bus = ! empty($validated['busId']) ? Bus::where('school_id', $schoolId)->withCount('students')->findOrFail($validated['busId']) : null;
         $students = Student::query()->where('school_id', $schoolId)->whereIn('id', $validated['studentIds'])->get();
 
         if ($bus) {
@@ -448,6 +538,8 @@ class AdminController extends Controller
             'bus_id' => $validated['busId'] ?? null,
         ]);
 
+        $this->syncParentMemberships($schoolId, $students->pluck('parent_id')->all());
+
         return response()->json([
             'message' => 'Assignments updated.',
         ]);
@@ -457,11 +549,25 @@ class AdminController extends Controller
     {
         $schoolId = $this->tenantSchoolId($request);
 
+        if ($this->hasActiveTrips($schoolId, [$bus->id])) {
+            return response()->json([
+                'message' => 'Cannot delete a bus with an active trip.',
+            ], 422);
+        }
+
+        $parentIds = $bus->students()->pluck('parent_id')->all();
+        $driverId = $bus->driver_id;
         DB::transaction(function () use ($bus, $schoolId) {
             Student::query()->where('school_id', $schoolId)->where('bus_id', $bus->id)->update(['bus_id' => null]);
             $bus->update(['driver_id' => null]);
             $bus->delete();
         });
+
+        $this->syncParentMemberships($schoolId, $parentIds);
+        $driver = User::where('school_id', $schoolId)->find($driverId);
+        if ($driver) {
+            $this->syncFirebaseMembership($driver);
+        }
 
         return response()->json(['message' => 'Bus deleted.']);
     }
@@ -475,8 +581,11 @@ class AdminController extends Controller
             'userIds.*' => ['integer', $this->tenantExists('users', $schoolId)],
         ]);
 
-        DB::transaction(function () use ($validated, $schoolId) {
+        $usersToDeactivate = collect();
+
+        DB::transaction(function () use ($validated, $schoolId, &$usersToDeactivate) {
             $users = User::where('school_id', $schoolId)->whereIn('id', $validated['userIds'])->get();
+            $usersToDeactivate = $users;
 
             foreach ($users as $user) {
                 if ($user->role === 'driver') {
@@ -488,6 +597,8 @@ class AdminController extends Controller
 
             User::where('school_id', $schoolId)->whereIn('id', $validated['userIds'])->delete();
         });
+
+        $usersToDeactivate->each(fn (User $user) => $this->syncFirebaseMembership($user, false));
 
         return response()->json(['message' => 'Users deleted.']);
     }
@@ -501,11 +612,25 @@ class AdminController extends Controller
             'busIds.*' => ['integer', $this->tenantExists('buses', $schoolId)],
         ]);
 
+        if ($this->hasActiveTrips($schoolId, $validated['busIds'])) {
+            return response()->json([
+                'message' => 'Cannot delete buses with active trips.',
+            ], 422);
+        }
+
+        $parentIds = Student::where('school_id', $schoolId)
+            ->whereIn('bus_id', $validated['busIds'])->pluck('parent_id')->all();
+        $driverIds = Bus::where('school_id', $schoolId)
+            ->whereIn('id', $validated['busIds'])->pluck('driver_id')->filter()->all();
         DB::transaction(function () use ($validated, $schoolId) {
             Student::query()->where('school_id', $schoolId)->whereIn('bus_id', $validated['busIds'])->update(['bus_id' => null]);
             Bus::where('school_id', $schoolId)->whereIn('id', $validated['busIds'])->update(['driver_id' => null]);
             Bus::where('school_id', $schoolId)->whereIn('id', $validated['busIds'])->delete();
         });
+
+        $this->syncParentMemberships($schoolId, $parentIds);
+        User::where('school_id', $schoolId)->whereIn('id', $driverIds)->get()
+            ->each(fn (User $driver) => $this->syncFirebaseMembership($driver));
 
         return response()->json(['message' => 'Buses deleted.']);
     }
@@ -529,11 +654,12 @@ class AdminController extends Controller
                 'integer',
                 Rule::exists('users', 'id')->where(fn ($query) => $query
                     ->where('role', 'parent')
-                    ->where('school_id', $schoolId)),
+                    ->where('school_id', $schoolId)
+                    ->where('status', 'active')),
             ],
             'busId' => ['nullable', 'integer', $this->tenantExists('buses', $schoolId)],
-            'pickupLat' => ['nullable', 'numeric'],
-            'pickupLng' => ['nullable', 'numeric'],
+            'pickupLat' => ['nullable', 'numeric', 'between:-90,90'],
+            'pickupLng' => ['nullable', 'numeric', 'between:-180,180'],
             'locationConformee' => ['nullable', 'boolean'],
         ]);
     }
@@ -543,9 +669,39 @@ class AdminController extends Controller
         return (int) $request->user()->school_id;
     }
 
-    private function tenantExists(string $table, int $schoolId, string $column = 'id'): \Illuminate\Validation\Rules\Exists
+    private function tenantExists(string $table, int $schoolId, string $column = 'id'): Exists
     {
         return Rule::exists($table, $column)->where(fn ($query) => $query->where('school_id', $schoolId));
+    }
+
+    private function hasActiveTrips(int $schoolId, array $busIds): bool
+    {
+        return Trip::query()
+            ->where('school_id', $schoolId)
+            ->whereIn('bus_id', $busIds)
+            ->where('status', 'in_progress')
+            ->exists();
+    }
+
+    private function busHasCapacityForStudent(int $schoolId, ?int $busId, ?Student $student = null): bool
+    {
+        if (! $busId) {
+            return true;
+        }
+
+        $bus = Bus::query()
+            ->where('school_id', $schoolId)
+            ->where('id', $busId)
+            ->withCount([
+                'students as assigned_students_count' => function ($query) use ($student): void {
+                    if ($student) {
+                        $query->whereKeyNot($student->id);
+                    }
+                },
+            ])
+            ->firstOrFail();
+
+        return $bus->assigned_students_count < $bus->capacity;
     }
 
     private function syncDriverBus(User $driver, ?int $busId, int $schoolId): void
@@ -565,6 +721,18 @@ class AdminController extends Controller
         }
 
         $bus->update(['driver_id' => $driverId]);
+    }
+
+    private function syncParentMemberships(int $schoolId, array $parentIds): void
+    {
+        User::where('school_id', $schoolId)->where('role', 'parent')
+            ->whereIn('id', array_unique(array_filter($parentIds)))->get()
+            ->each(fn (User $parent) => $this->syncFirebaseMembership($parent));
+    }
+
+    private function syncFirebaseMembership(User $user, ?bool $active = null): void
+    {
+        app(FirebaseMembershipSynchronizer::class)->enqueue($user, $user->school_id, $active);
     }
 
     private function serializeUser(User $user): array

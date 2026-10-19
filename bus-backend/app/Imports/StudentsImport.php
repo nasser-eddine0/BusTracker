@@ -18,10 +18,12 @@ class StudentsImport implements ToCollection, WithHeadingRow
      * Example: ['student_name' => 'nom_eleve', 'parent_cin' => 'cin_du_pere', ...]
      */
     private array $mapping;
+    private int $schoolId;
 
-    public function __construct(array $mapping = [])
+    public function __construct(array $mapping = [], int $schoolId = 0)
     {
         $this->mapping = $mapping;
+        $this->schoolId = $schoolId;
     }
 
     /**
@@ -71,6 +73,13 @@ class StudentsImport implements ToCollection, WithHeadingRow
         return strcasecmp($address, 'unknown') === 0 ? null : $address;
     }
 
+    private function generatedParentEmail(string $parentCin): string
+    {
+        $safeCin = preg_replace('/[^a-z0-9]+/', '-', strtolower($parentCin));
+
+        return trim($safeCin, '-') . '.school-' . $this->schoolId . '@parent.generated';
+    }
+
     public function collection(Collection $rows)
     {
         DB::transaction(function () use ($rows) {
@@ -85,10 +94,14 @@ class StudentsImport implements ToCollection, WithHeadingRow
 
                 // 1. Find or Create the Parent using CIN as unique key
                 $parent = User::firstOrCreate(
-                    ['cin' => $parentCin],
                     [
+                        'school_id' => $this->schoolId,
+                        'cin' => $parentCin,
+                    ],
+                    [
+                        'school_id'         => $this->schoolId,
                         'name'             => $this->mapped($row, 'parent_name') ?? 'Parent',
-                        'email'            => $this->mapped($row, 'parent_email') ?? strtolower($parentCin) . '@parent.generated',
+                        'email'            => $this->mapped($row, 'parent_email') ?? $this->generatedParentEmail($parentCin),
                         'phone'            => $this->mapped($row, 'parent_phone'),
                         'password'         => Str::password(16),
                         'role'             => 'parent',
@@ -115,10 +128,12 @@ class StudentsImport implements ToCollection, WithHeadingRow
                 // 2. Find or Create the Student (unique combo: name + parent)
                 $student = Student::firstOrCreate(
                     [
+                        'school_id' => $this->schoolId,
                         'full_name' => $studentName,
                         'parent_id' => $parent->id,
                     ],
                     [
+                        'school_id'          => $this->schoolId,
                         'reg_code'           => strtoupper(Str::random(8)),
                         'address'            => $this->normalizedAddress($this->mapped($row, 'student_address')) ?? 'N/A',
                         'grade'              => $this->mapped($row, 'grade'),

@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
-import { get, ref, remove, set, update } from "firebase/database";
 import toast from "react-hot-toast";
 import Sidebar from "../../components/ui/Sidebar";
 import { finalizeDriverTrip, fetchDriverDashboard, fetchDriverNotifications, startDriverTrip, updateDriverStudentStatus, pingDriverLocation, nudgeParent, markDriverNotificationsRead } from "../../api/driver";
 import { useAuth } from "../../context/AuthContextObject";
 import { useActiveTripById, useRealtime } from "../../context/useRealtime";
-import { db } from "../../firebase";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
 import { useLanguage } from "../../i18n";
 import { buildDriverNavigation } from "./constants";
@@ -135,8 +133,8 @@ function DriverPage() {
   }, [applyNotificationStatus, tripStarted]);
 
   const busLive = useMemo(
-    () => (bus ? { ...bus, location: liveLocations[String(bus.id)] || bus.location || null } : null),
-    [bus, liveLocations]
+    () => (bus ? { ...bus, location: activeTripState?.live_location || liveLocations[String(bus.id)] || bus.location || null } : null),
+    [activeTripState?.live_location, bus, liveLocations]
   );
 
   const routeStudents = useMemo(
@@ -217,20 +215,7 @@ function DriverPage() {
             if (pingResult.distance !== null && pingResult.distance !== undefined) {
               setDistanceToTarget(pingResult.distance);
             }
-          } catch {
-            // Backend ping failed; continue with Firebase fallback
-          }
-
-          try {
-            await update(ref(db, `active_trips/${schoolId}/${activeTripId}`), {
-              live_location: {
-                lat: coords.latitude,
-                lng: coords.longitude,
-                updated_at: new Date().toISOString(),
-              },
-              updated_at: new Date().toISOString(),
-            });
-          } catch { /* ignore */ }
+          } catch { /* next GPS tick will retry */ }
         },
         () => {},
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
@@ -273,39 +258,7 @@ function DriverPage() {
 
     try {
       const data = await startDriverTrip(bus.id, { type });
-      const nextTripId = data.tripId;
-      const nextLiveAttendance = Object.fromEntries(
-        Object.entries(studentsMap).map(([studentId, student]) => [
-          String(studentId),
-          {
-            status: normalizeStudentStatus(student.status),
-            updated_at: new Date().toISOString(),
-          },
-        ])
-      );
-
-      try {
-        await set(ref(db, `active_trips/${schoolId}/${nextTripId}`), {
-          trip_id: String(nextTripId),
-          school_id: String(schoolId),
-          bus_id: String(bus.id),
-          bus_name: bus.name || "",
-          driver_id: user?.id ? String(user.id) : null,
-          type: data.trip?.type || type || "aller",
-          status: "in_progress",
-          started_at: data.trip?.startedAt || new Date().toISOString(),
-          live_location: busLive?.location
-            ? {
-                lat: busLive.location.lat,
-                lng: busLive.location.lng,
-                updated_at: new Date().toISOString(),
-              }
-            : null,
-          live_attendance: nextLiveAttendance,
-        });
-      } catch { /* ignore */ }
-
-      setActiveTripId(nextTripId);
+      setActiveTripId(data.tripId);
       toast.success(t("tripStarted"));
     } catch (error) {
       setTripStarted(false);
@@ -338,15 +291,6 @@ function DriverPage() {
         status,
       });
 
-      if (activeTripId) {
-        try {
-          await update(ref(db, `active_trips/${schoolId}/${activeTripId}/live_attendance/${currentStudent.id}`), {
-            status,
-            updated_at: new Date().toISOString(),
-          });
-        } catch { /* ignore */ }
-      }
-
       toast.success(["mounted", "in_bus"].includes(status) ? t("studentMounted") : t("studentAbsent"));
     } catch (error) {
       setStudentsMap((current) => ({
@@ -368,13 +312,7 @@ function DriverPage() {
     setTripBusy(true);
     try {
       const tripType = activeTripState?.type || "aller";
-      let liveAttendance = {};
-      try {
-        const attendanceSnapshot = await get(ref(db, `active_trips/${schoolId}/${activeTripId}/live_attendance`));
-        liveAttendance = attendanceSnapshot.val() || {};
-      } catch {
-        liveAttendance = activeTripState?.live_attendance || {};
-      }
+      const liveAttendance = activeTripState?.live_attendance || {};
 
       const attendance = Object.entries(studentsMap).map(([studentId, student]) => {
         const liveEntry = liveAttendance[String(studentId)] || {};
@@ -397,7 +335,6 @@ function DriverPage() {
         final_location: busLive?.location ? { lat: busLive.location.lat, lng: busLive.location.lng } : null,
       });
 
-      try { await remove(ref(db, `active_trips/${schoolId}/${activeTripId}`)); } catch { /* ignore */ }
       setActiveTripId(null);
       setTripCompleted(true);
       toast.success(t("dropCompleted"));

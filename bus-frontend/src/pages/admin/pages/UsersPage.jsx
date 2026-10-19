@@ -18,7 +18,7 @@ import { matchesSmartSearch } from "../utils";
 import AdminUserForm from "../components/AdminUserForm";
 import ModalShell from "../components/ModalShell";
 
-function UsersPage({ admins, drivers, parents, buses, onRefresh, setBootstrap }) {
+function UsersPage({ drivers, parents, buses, onRefresh, setBootstrap }) {
   const { t } = useLanguage();
   const [activeRole, setActiveRole] = useState("driver");
   const [search, setSearch] = useState("");

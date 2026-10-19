@@ -12,9 +12,10 @@
     },
     "active_trips": {
       "$schoolId": {
-        ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).exists()",
+        ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'admin'",
         "$tripId": {
-          ".write": "auth != null && (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'admin' || root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'driver')",
+          ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'driver' || root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'parent') && data.child('bus_id').isString() && root.child('school_users').child($schoolId).child(auth.uid).child('allowedBusIds').child(data.child('bus_id').val()).val() === true",
+          ".write": false,
           ".validate": "newData.hasChildren(['trip_id', 'bus_id', 'status']) && newData.child('trip_id').isString() && newData.child('bus_id').isString() && (newData.child('status').val() === 'in_progress' || newData.child('status').val() === 'completed')",
           "trip_id": {
             ".validate": "newData.isString()"
@@ -75,12 +76,13 @@
         }
       }
     },
-    "bus_locations": {
+    "active_buses": {
       "$schoolId": {
-        ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).exists()",
+        ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'admin'",
         "$busId": {
-          ".write": "auth != null && (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'admin' || (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'driver' && root.child('school_users').child($schoolId).child(auth.uid).child('busId').val() === $busId))",
-          ".validate": "newData.hasChildren(['lat', 'lng', 'updated_at']) && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180",
+          ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'driver' || root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'parent') && root.child('school_users').child($schoolId).child(auth.uid).child('allowedBusIds').child($busId).val() === true",
+          ".write": false,
+          ".validate": "newData.hasChildren(['trip_id']) && newData.child('trip_id').isString()",
           "$other": {
             ".validate": false
           }
@@ -90,8 +92,8 @@
     "notifications": {
       "$schoolId": {
         "$uid": {
-          ".read": "auth != null && auth.uid === $uid && root.child('school_users').child($schoolId).child(auth.uid).exists()",
-          ".write": "auth != null && (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'admin' || root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'driver')"
+          ".read": "auth != null && auth.uid === $uid && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true",
+          ".write": false
         }
       }
     }

@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/axios";
 import { auth, signInWithCustomToken, signOut as firebaseSignOut } from "../firebase";
 import { AuthContext } from "./AuthContextObject";
-export { useAuth } from "./AuthContextObject";
-
 function normalizeUser(user) {
   if (!user) return null;
 

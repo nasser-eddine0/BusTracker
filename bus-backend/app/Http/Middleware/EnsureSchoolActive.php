@@ -12,15 +12,6 @@ class EnsureSchoolActive
     {
         $user = $request->user();
 
-        // Temp debug
-        \Illuminate\Support\Facades\Log::info('EnsureSchoolActive', [
-            'user_id' => $user?->id,
-            'role' => $user?->role,
-            'school_id' => $user?->school_id,
-            'school_id_type' => gettype($user?->school_id),
-            'is_null' => $user?->school_id === null,
-        ]);
-
         if ($user?->role === 'parent' && $user->school_id === null) {
             return $next($request);
         }

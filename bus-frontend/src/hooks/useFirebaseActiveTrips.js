@@ -5,20 +5,19 @@ import { useAuth } from "../context/AuthContextObject";
 
 export default function useFirebaseActiveTrips() {
   const { schoolId } = useAuth();
-  const [activeTrips, setActiveTrips] = useState({});
+  const [snapshot, setSnapshot] = useState({ schoolId: null, value: {} });
 
   useEffect(() => {
     if (!schoolId) {
-      setActiveTrips({});
       return undefined;
     }
 
     const unsubscribe = onValue(ref(db, `active_trips/${schoolId}`), (snapshot) => {
-      setActiveTrips(snapshot.val() || {});
+      setSnapshot({ schoolId, value: snapshot.val() || {} });
     });
 
     return () => unsubscribe();
   }, [schoolId]);
 
-  return activeTrips;
+  return snapshot.schoolId === schoolId ? snapshot.value : {};
 }
