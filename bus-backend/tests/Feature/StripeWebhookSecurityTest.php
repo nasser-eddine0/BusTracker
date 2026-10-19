@@ -66,6 +66,53 @@ class StripeWebhookSecurityTest extends TestCase
         ]);
     }
 
+    public function test_failed_webhook_is_reprocessed_on_stripe_retry(): void
+    {
+        config(['services.stripe.webhook_secret' => 'whsec_test']);
+
+        $school = School::create([
+            'name' => 'Retry Webhook School',
+            'subdomain' => 'retry-webhook-school',
+            'max_buses' => 5,
+            'is_active' => true,
+            'subscription_status' => 'active',
+            'stripe_customer_id' => 'cus_retry',
+            'stripe_subscription_id' => 'sub_retry',
+        ]);
+
+        $payload = json_encode([
+            'id' => 'evt_retry_payment_failed',
+            'type' => 'invoice.payment_failed',
+            'data' => ['object' => [
+                'customer' => 'cus_retry',
+                'subscription' => 'sub_retry',
+                'subscription_details' => ['metadata' => ['school_id' => (string) $school->id]],
+            ]],
+        ], JSON_THROW_ON_ERROR);
+
+        $server = [
+            'HTTP_STRIPE_SIGNATURE' => $this->stripeSignature($payload, 'whsec_test'),
+            'CONTENT_TYPE' => 'application/json',
+        ];
+
+        DB::table('stripe_webhook_logs')->insert([
+            'stripe_event_id' => 'evt_retry_payment_failed',
+            'event_type' => 'invoice.payment_failed',
+            'status' => 'failed',
+            'payload' => $payload,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->call('POST', '/api/stripe/webhook', [], [], [], $server, $payload)->assertOk();
+
+        $this->assertSame('past_due', $school->fresh()->subscription_status);
+        $this->assertDatabaseHas('stripe_webhook_logs', [
+            'stripe_event_id' => 'evt_retry_payment_failed',
+            'status' => 'processed',
+        ]);
+    }
+
     private function stripeSignature(string $payload, string $secret): string
     {
         $timestamp = time();

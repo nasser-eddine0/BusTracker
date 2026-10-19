@@ -2,9 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\FirebaseRequestException;
 use App\Models\User;
+use App\Models\FirebaseSyncFailure;
+use App\Services\FirebaseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Mockery;
 use Tests\TestCase;
 
 class AuthControllerTest extends TestCase
@@ -155,5 +159,86 @@ class AuthControllerTest extends TestCase
         $this->assertDatabaseMissing('personal_access_tokens', [
             'tokenable_id' => $user->id,
         ]);
+    }
+
+    public function test_firebase_token_failure_does_not_expose_internal_error_when_debug_is_disabled(): void
+    {
+        config(['app.debug' => false]);
+
+        $user = User::factory()->create([
+            'role' => 'parent',
+            'status' => 'active',
+        ]);
+
+        $firebase = Mockery::mock(FirebaseService::class);
+        $firebase->shouldReceive('createCustomTokenForUser')
+            ->once()
+            ->with($user->id)
+            ->andThrow(new FirebaseRequestException('Credential file C:\\secret\\firebase.json missing.'));
+        $this->app->instance(FirebaseService::class, $firebase);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/firebase-token')
+            ->assertStatus(500)
+            ->assertJson([
+                'message' => 'Failed to generate Firebase token.',
+            ])
+            ->assertJsonMissing([
+                'error' => 'Credential file C:\\secret\\firebase.json missing.',
+            ]);
+    }
+
+    public function test_disabled_user_cannot_request_a_firebase_token(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'parent',
+            'status' => 'disabled',
+        ]);
+
+        $firebase = Mockery::mock(FirebaseService::class);
+        $firebase->shouldNotReceive('createCustomTokenForUser');
+        $this->app->instance(FirebaseService::class, $firebase);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/firebase-token')
+            ->assertForbidden()
+            ->assertJson(['message' => 'This account is disabled.']);
+    }
+
+    public function test_firebase_token_request_does_not_reactivate_a_disabled_projection(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'parent',
+            'status' => 'active',
+        ]);
+
+        $sync = FirebaseSyncFailure::create([
+            'operation' => 'membership_sync',
+            'context' => ['user_id' => $user->id, 'school_id' => $user->school_id],
+            'user_id' => $user->id,
+            'school_id' => $user->school_id,
+            'desired_active' => false,
+            'desired_role' => $user->role,
+            'desired_state' => ['active' => false],
+            'status' => 'synced',
+            'membership_key' => $user->school_id.':'.$user->id,
+            'completed_at' => now(),
+        ]);
+
+        $firebase = Mockery::mock(FirebaseService::class);
+        $firebase->shouldReceive('createCustomTokenForUser')->once()->with($user->id)->andReturn('synthetic-token');
+        $this->app->instance(FirebaseService::class, $firebase);
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/firebase-token')
+            ->assertOk()
+            ->assertJson(['firebaseToken' => 'synthetic-token']);
+
+        $this->assertDatabaseHas('firebase_sync_failures', [
+            'id' => $sync->id,
+            'desired_active' => 0,
+            'status' => 'synced',
+        ]);
+        $this->assertDatabaseCount('firebase_sync_failures', 1);
     }
 }

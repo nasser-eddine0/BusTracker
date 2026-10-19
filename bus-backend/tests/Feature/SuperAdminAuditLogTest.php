@@ -12,6 +12,36 @@ class SuperAdminAuditLogTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_disabled_super_admin_cannot_read_or_modify_platform_data(): void
+    {
+        $user = User::factory()->create(['role' => 'super_admin', 'status' => 'disabled']);
+        $this->actingAs($user, 'sanctum');
+        $this->getJson('/api/super-admin/audit-logs')->assertForbidden();
+        $this->getJson('/api/super-admin/schools')->assertForbidden();
+        $this->getJson('/api/super-admin/admins')->assertForbidden();
+        $this->postJson('/api/super-admin/schools', [
+            'name' => 'Forbidden School', 'subdomain' => 'forbidden-school', 'max_buses' => 5,
+        ])->assertForbidden();
+        $this->assertDatabaseMissing('schools', ['subdomain' => 'forbidden-school']);
+    }
+
+    public function test_security_severity_filter_is_validated_and_applied(): void
+    {
+        $user = User::factory()->create(['role' => 'super_admin', 'status' => 'active']);
+        foreach (['info', 'warning', 'critical'] as $severity) {
+            AuditLog::create([
+                'user_id' => $user->id, 'action' => 'test_event',
+                'description' => 'Synthetic test event', 'severity' => $severity,
+            ]);
+        }
+        $this->actingAs($user, 'sanctum');
+        $this->getJson('/api/super-admin/audit-logs?severity=critical')
+            ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.severity', 'critical');
+        $this->getJson('/api/super-admin/audit-logs?severity=invalid')
+            ->assertUnprocessable()->assertJsonValidationErrors('severity');
+        $this->getJson('/api/super-admin/audit-logs')->assertOk()->assertJsonPath('total', 3);
+    }
+
     public function test_super_admin_school_actions_are_audited(): void
     {
         $superAdmin = User::create([

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\School;
 use App\Models\User;
+use App\Services\FirebaseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -119,6 +120,12 @@ class AdminAccountCreationTest extends TestCase
             'phone' => '+212600000001',
         ]);
 
+        $this->mock(FirebaseService::class, function ($mock) use ($schoolOne, $adminOne) {
+            $mock->shouldReceive('deactivateUserMembership')
+                ->once()
+                ->with($schoolOne->id, $adminOne->id, 'admin');
+        });
+
         $adminTwo = User::create([
             'school_id' => $schoolTwo->id,
             'name' => 'Beta Admin',
@@ -158,8 +165,7 @@ class AdminAccountCreationTest extends TestCase
         ]);
 
         $this->assertTrue(
-            
-            
+
             password_verify('newPassword123', User::find($adminOne->id)->password)
         );
     }
