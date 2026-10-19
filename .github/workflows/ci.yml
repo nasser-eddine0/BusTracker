@@ -1,0 +1,87 @@
+name: BusTracker CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, sqlite3, pdo_sqlite
+          coverage: none
+
+      - name: Install PHP dependencies
+        working-directory: bus-backend
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Prepare Laravel test environment
+        working-directory: bus-backend
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: PHP syntax checks
+        working-directory: bus-backend
+        run: find app tests config routes database -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Laravel tests
+        working-directory: bus-backend
+        env:
+          APP_ENV: testing
+          APP_DEBUG: 'false'
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+        run: php artisan test --do-not-cache-result
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        working-directory: bus-frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: bus-frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Frontend lint
+        working-directory: bus-frontend
+        run: npm run lint
+
+      - name: Frontend build
+        working-directory: bus-frontend
+        run: npm run build
+
+      - name: Set up Java for Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Firebase rules tests
+        working-directory: bus-frontend
+        run: npx firebase emulators:exec --only auth,database --project demo-bustracker "npm run test:rules"
+
+      - name: Playwright functional tests
+        working-directory: bus-frontend
+        env:
+          PLAYWRIGHT_CHANNEL: chromium
+        run: npm run test:e2e
+
+      - name: Dependency audit (diagnostic)
+        working-directory: bus-frontend
+        continue-on-error: true
+        run: npm audit --omit=dev
+
+      - name: Diff check
+        run: git diff --check
