@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ref, update } from "firebase/database";
 import { HiBell, HiTruck } from "react-icons/hi";
 import { HiMapPin, HiUser } from "react-icons/hi2";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +7,6 @@ import toast from "react-hot-toast";
 import { declareParentAbsence, declareParentReady, fetchParentDashboard, fetchParentNotifications, markParentNotificationsRead } from "../../api/parent";
 import { useAuth } from "../../context/AuthContextObject";
 import { useActiveTripById, useRealtime, useTripForBus } from "../../context/useRealtime";
-import { db } from "../../firebase";
 import useNotificationSocket from "../../hooks/useNotificationSocket";
 import { useLanguage } from "../../i18n";
 import AlertsTab from "./views/AlertsTab";
@@ -197,7 +195,7 @@ function ParentPage() {
   }, []);
 
   useEffect(() => {
-    if (!bus?.activeTripId) {
+    if (!effectiveTripId) {
       setProximityAlert("");
       return;
     }
@@ -207,7 +205,7 @@ function ParentPage() {
       return;
     }
 
-    const proximityStorageKey = `parent-proximity-${studentWithLiveStatus.id}-trip-${bus.activeTripId}`;
+    const proximityStorageKey = `parent-proximity-${studentWithLiveStatus.id}-trip-${effectiveTripId}`;
     const proximityState = window.sessionStorage.getItem(proximityStorageKey);
 
     if (distanceToBus <= 0.5) {
@@ -219,7 +217,7 @@ function ParentPage() {
     if (distanceToBus <= 0.4) {
       if (proximityState !== "very-close") {
         const nextNotification = {
-          id: `proximity-very-close-${studentWithLiveStatus.id}-trip-${bus.activeTripId}`,
+          id: `proximity-very-close-${studentWithLiveStatus.id}-trip-${effectiveTripId}`,
           title: t("busVeryClose"),
           message: t("busWithin400m"),
           studentName: studentWithLiveStatus.name,
@@ -242,7 +240,7 @@ function ParentPage() {
     if (distanceToBus <= 0.5) {
       if (!proximityState) {
         const nextNotification = {
-          id: `proximity-close-${studentWithLiveStatus.id}-trip-${bus.activeTripId}`,
+          id: `proximity-close-${studentWithLiveStatus.id}-trip-${effectiveTripId}`,
           title: t("busApproaching"),
           message: "The bus is arriving soon!",
           studentName: studentWithLiveStatus.name,
@@ -265,22 +263,12 @@ function ParentPage() {
     if (proximityState) {
       window.sessionStorage.removeItem(proximityStorageKey);
     }
-  }, [bus?.activeTripId, busWithLiveLocation?.location, distanceToBus, homeLocation, studentWithLiveStatus, t]);
+  }, [busWithLiveLocation?.location, distanceToBus, effectiveTripId, homeLocation, studentWithLiveStatus, t]);
 
   const handleReady = async () => {
     if (!studentWithLiveStatus?.id || readyState === "not-coming") return;
     setReadyState("ready");
     toast.success(t("childReady"));
-
-    // Update Firebase so the driver sees "ready" status in real-time
-    if (effectiveTripId) {
-      try {
-        await update(ref(db, `active_trips/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
-          status: "ready",
-          updated_at: new Date().toISOString(),
-        });
-      } catch { /* best-effort */ }
-    }
 
     try {
       await declareParentReady(studentWithLiveStatus.id);
@@ -304,18 +292,6 @@ function ParentPage() {
     try {
       const response = await declareParentAbsence(studentWithLiveStatus.id);
       setStudent(response.data.student);
-
-      // Update Firebase so the driver sees "absent" status in real-time
-      if (effectiveTripId) {
-        try {
-          await update(ref(db, `active_trips/${effectiveTripId}/live_attendance/${studentWithLiveStatus.id}`), {
-            status: "absent",
-            updated_at: new Date().toISOString(),
-          });
-        } catch {
-          // Absence is already persisted in the backend; ignore realtime mirror failures.
-        }
-      }
 
       setReadyState("not-coming");
       setShowAbsenceModal(false);

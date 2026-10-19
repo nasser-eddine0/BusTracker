@@ -36,7 +36,18 @@ return [
     ],
 
     'firebase' => [
-        'database_url' => env('FIREBASE_DATABASE_URL', 'https://bustracker-5e6c4-default-rtdb.firebaseio.com'),
+        'database_url' => env('FIREBASE_DATABASE_URL'),
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+        'project_id' => env('GOOGLE_CLOUD_PROJECT', env('FIREBASE_PROJECT_ID', 'demo-bustracker')),
+        'sync_driver' => env('FIREBASE_SYNC_DRIVER', 'kreait'),
+        'database_emulator_host' => env('FIREBASE_DATABASE_EMULATOR_HOST'),
+        'emulator_token' => env('FIREBASE_EMULATOR_TOKEN'),
+    ],
+
+    'stripe' => [
+        'key' => env('STRIPE_KEY'),
+        'secret' => env('STRIPE_SECRET'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
     'xai' => [

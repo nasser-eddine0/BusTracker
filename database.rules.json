@@ -2,96 +2,98 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "users": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
-        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
-      }
-    },
-    "buses": {
-      "$busId": {
-        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('driverUid').val() === auth.uid || $busId === root.child('students').child(root.child('users').child(auth.uid).child('studentId').val()).child('busId').val())",
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
-        "location": {
-          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || data.parent().child('driverUid').val() === auth.uid || root.child('users').child(auth.uid).child('busId').val() === $busId)",
-          ".validate": "newData.hasChildren(['lat', 'lng', 'time', 'driverUid']) && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('time').isNumber() && newData.child('driverUid').val() === auth.uid"
-        }
-      }
-    },
-    "students": {
-      "$studentId": {
-        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || data.child('parentUid').val() === auth.uid || root.child('users').child(auth.uid).child('studentId').val() === $studentId || data.child('busId').val() === root.child('users').child(auth.uid).child('busId').val())",
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (root.child('users').child(auth.uid).child('role').val() === 'driver' && data.child('busId').val() === root.child('users').child(auth.uid).child('busId').val()))",
-        "status": {
-          ".validate": "newData.val() === 'waiting' || newData.val() === 'entered' || newData.val() === 'dropped' || newData.val() === 'absent'"
-        },
-        "updatedBy": {
-          ".validate": "newData.isString()"
-        },
-        "updatedAt": {
-          ".validate": "newData.isNumber()"
-        }
-      }
-    },
-    "notifications": {
-      "parents": {
-        "$parentKey": {
-          ".read": "auth != null",
-          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'driver')"
+    "school_users": {
+      "$schoolId": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
         }
       }
     },
     "active_trips": {
-      ".read": true,
-      "$tripId": {
-        ".write": "newData.exists() || data.exists()",
-        ".validate": "newData.hasChildren(['trip_id', 'bus_id', 'status']) && newData.child('trip_id').isNumber() && newData.child('bus_id').isNumber() && (newData.child('status').val() === 'in_progress' || newData.child('status').val() === 'completed')",
-        "trip_id": {
-          ".validate": "newData.isNumber()"
-        },
-        "bus_id": {
-          ".validate": "newData.isNumber()"
-        },
-        "driver_id": {
-          ".validate": "newData.isNumber() || newData.val() === null"
-        },
-        "type": {
-          ".validate": "newData.val() === 'aller' || newData.val() === 'retour'"
-        },
-        "status": {
-          ".validate": "newData.val() === 'in_progress' || newData.val() === 'completed'"
-        },
-        "started_at": {
-          ".validate": "newData.isString()"
-        },
-        "updated_at": {
-          ".validate": "newData.isString()"
-        },
-        "live_location": {
-          ".validate": "newData.val() === null || (newData.hasChildren(['lat', 'lng']) && newData.child('lat').isNumber() && newData.child('lng').isNumber())",
-          "lat": {
-            ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+      "$schoolId": {
+        ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'admin'",
+        "$tripId": {
+          ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'driver' || root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'parent') && data.child('bus_id').isString() && root.child('school_users').child($schoolId).child(auth.uid).child('allowedBusIds').child(data.child('bus_id').val()).val() === true",
+          ".write": false,
+          ".validate": "newData.hasChildren(['trip_id', 'bus_id', 'status']) && newData.child('trip_id').isString() && newData.child('bus_id').isString() && (newData.child('status').val() === 'in_progress' || newData.child('status').val() === 'completed')",
+          "trip_id": {
+            ".validate": "newData.isString()"
           },
-          "lng": {
-            ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+          "bus_id": {
+            ".validate": "newData.isString()"
+          },
+          "bus_name": {
+            ".validate": "newData.isString()"
+          },
+          "driver_id": {
+            ".validate": "newData.isString() || newData.isNumber() || newData.val() === null"
+          },
+          "type": {
+            ".validate": "newData.val() === 'aller' || newData.val() === 'retour' || newData.val() === 'pickup'"
+          },
+          "status": {
+            ".validate": "newData.val() === 'in_progress' || newData.val() === 'completed'"
+          },
+          "started_at": {
+            ".validate": "newData.isString()"
           },
           "updated_at": {
             ".validate": "newData.isString()"
-          }
-        },
-        "live_attendance": {
-          "$studentId": {
-            ".validate": "newData.hasChildren(['status'])",
-            "status": {
-              ".validate": "newData.val() === 'waiting' || newData.val() === 'ready' || newData.val() === 'mounted' || newData.val() === 'in_bus' || newData.val() === 'absent' || newData.val() === 'dropped'"
+          },
+          "live_location": {
+            ".validate": "newData.val() === null || (newData.hasChildren(['lat', 'lng']) && newData.child('lat').isNumber() && newData.child('lng').isNumber())",
+            "lat": {
+              ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+            },
+            "lng": {
+              ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
             },
             "updated_at": {
               ".validate": "newData.isString()"
+            },
+            "$other": {
+              ".validate": false
             }
+          },
+          "live_attendance": {
+            "$studentId": {
+              ".validate": "newData.hasChildren(['status'])",
+              "status": {
+                ".validate": "newData.val() === 'waiting' || newData.val() === 'ready' || newData.val() === 'mounted' || newData.val() === 'in_bus' || newData.val() === 'absent' || newData.val() === 'dropped'"
+              },
+              "updated_at": {
+                ".validate": "newData.isString()"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "$other": {
+            ".validate": false
           }
-        },
-        "$other": {
-          ".validate": false
+        }
+      }
+    },
+    "active_buses": {
+      "$schoolId": {
+        ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'admin'",
+        "$busId": {
+          ".read": "auth != null && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true && (root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'driver' || root.child('school_users').child($schoolId).child(auth.uid).child('role').val() === 'parent') && root.child('school_users').child($schoolId).child(auth.uid).child('allowedBusIds').child($busId).val() === true",
+          ".write": false,
+          ".validate": "newData.hasChildren(['trip_id']) && newData.child('trip_id').isString()",
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "notifications": {
+      "$schoolId": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid && root.child('school_users').child($schoolId).child(auth.uid).child('active').val() === true",
+          ".write": false
         }
       }
     }

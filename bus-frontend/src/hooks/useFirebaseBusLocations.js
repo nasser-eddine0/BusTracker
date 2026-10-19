@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import { onValue, ref } from "firebase/database";
 import { db } from "../firebase";
+import { useAuth } from "../context/AuthContextObject";
 
 export default function useFirebaseBusLocations() {
-  const [locations, setLocations] = useState({});
+  const { schoolId } = useAuth();
+  const [snapshot, setSnapshot] = useState({ schoolId: null, value: {} });
 
   useEffect(() => {
-    const unsubscribe = onValue(ref(db, "active_trips"), (snapshot) => {
+    if (!schoolId) {
+      return undefined;
+    }
+
+    const unsubscribe = onValue(ref(db, `active_trips/${schoolId}`), (snapshot) => {
       const activeTrips = snapshot.val() || {};
       const nextLocations = Object.values(activeTrips).reduce((accumulator, trip) => {
         if (trip?.bus_id && trip?.live_location) {
@@ -15,11 +21,11 @@ export default function useFirebaseBusLocations() {
         return accumulator;
       }, {});
 
-      setLocations(nextLocations);
+      setSnapshot({ schoolId, value: nextLocations });
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [schoolId]);
 
-  return locations;
+  return snapshot.schoolId === schoolId ? snapshot.value : {};
 }

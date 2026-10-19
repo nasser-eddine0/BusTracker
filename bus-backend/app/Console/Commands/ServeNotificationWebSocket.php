@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Notification;
 use Illuminate\Console\Command;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -26,7 +27,7 @@ class ServeNotificationWebSocket extends Command
         $this->info("Notification WebSocket server listening on ws://{$host}:{$port}");
 
         $clients = [];
-        $broadcastPath = storage_path('app/notification-broadcasts.log');
+        $broadcastPath = $this->broadcastPath();
         if (!file_exists($broadcastPath)) {
             touch($broadcastPath);
         }
@@ -107,6 +108,16 @@ class ServeNotificationWebSocket extends Command
                 }
             }
 
+            $currentPath = $this->broadcastPath();
+            if ($currentPath !== $broadcastPath) {
+                $broadcastPath = $currentPath;
+                $cursor = 0;
+            }
+
+            if (!file_exists($broadcastPath)) {
+                touch($broadcastPath);
+            }
+
             clearstatcache(true, $broadcastPath);
             $currentSize = filesize($broadcastPath) ?: 0;
             if ($currentSize < $cursor) {
@@ -119,9 +130,13 @@ class ServeNotificationWebSocket extends Command
                     fseek($handle, $cursor);
                     while (($line = fgets($handle)) !== false) {
                         $event = json_decode(trim($line), true);
-                        if (!is_array($event)) {
+                        $notificationId = $event['context']['notification_id'] ?? null;
+                        $notification = $notificationId ? Notification::find((int) $notificationId) : null;
+                        if (!$notification) {
                             continue;
                         }
+
+                        $event = $this->serializeNotification($notification);
 
                         foreach ($clients as $client) {
                             if (!$client['user_id'] || $client['user_id'] !== ($event['recipientUserId'] ?? null)) {
@@ -139,6 +154,29 @@ class ServeNotificationWebSocket extends Command
                 }
             }
         }
+    }
+
+    private function broadcastPath(): string
+    {
+        return storage_path('logs/notification-broadcasts-'.now()->format('Y-m-d').'.log');
+    }
+
+    private function serializeNotification(Notification $notification): array
+    {
+        return [
+            'id' => (string) $notification->id,
+            'recipientUserId' => (string) $notification->recipient_user_id,
+            'parentId' => $notification->parent_id ? (string) $notification->parent_id : null,
+            'studentId' => $notification->student_id ? (string) $notification->student_id : null,
+            'busId' => $notification->bus_id ? (string) $notification->bus_id : null,
+            'tripId' => $notification->trip_id ? (string) $notification->trip_id : null,
+            'type' => $notification->type,
+            'title' => $notification->title,
+            'message' => $notification->message,
+            'payload' => $notification->payload,
+            'read' => $notification->read_at !== null,
+            'createdAt' => optional($notification->date_envoi ?? $notification->created_at)->toIso8601String(),
+        ];
     }
 
     private function performHandshake($socket, string $request): bool

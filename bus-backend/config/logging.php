@@ -73,6 +73,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'notification_broadcast' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/notification-broadcasts.log'),
+            'level' => env('NOTIFICATION_LOG_LEVEL', 'info'),
+            'days' => env('NOTIFICATION_LOG_DAYS', 3),
+            'formatter' => Monolog\Formatter\JsonFormatter::class,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

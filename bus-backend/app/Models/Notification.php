@@ -2,12 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Notification extends Model
 {
+    use BelongsToSchool;
+
     protected $fillable = [
+        'school_id',
         'recipient_user_id',
         'parent_id',
         'student_id',
@@ -43,7 +47,7 @@ class Notification extends Model
 
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(ParentAccount::class, 'parent_id');
+        return $this->belongsTo(User::class, 'parent_id');
     }
 
     public function student(): BelongsTo

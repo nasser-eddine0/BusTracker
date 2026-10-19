@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { HiChartBar, HiTruck, HiUserGroup } from "react-icons/hi";
 import { useLanguage, LangSwitcher } from "../i18n";
-import { motion } from "framer-motion";
 
 function RoleSelect() {
   const { t } = useLanguage();

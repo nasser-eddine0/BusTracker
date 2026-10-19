@@ -2,6 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContextObject";
 
 function getDashboardPath(role) {
+  if (role === "super_admin") return "/super-admin";
   if (role === "admin") return "/admin";
   if (role === "driver") return "/driver";
   if (role === "parent") return "/parent";

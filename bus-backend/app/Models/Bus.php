@@ -2,14 +2,19 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Bus extends Model
 {
+    use BelongsToSchool, SoftDeletes;
+
     protected $fillable = [
+        'school_id',
         'bus_name',
         'plate_number',
         'capacity',
@@ -35,7 +40,7 @@ class Bus extends Model
 
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(Chauffeur::class, 'driver_id');
+        return $this->belongsTo(User::class, 'driver_id');
     }
 
     public function driverUser(): BelongsTo
@@ -63,6 +68,6 @@ class Bus extends Model
 
     public function chauffeur(): HasOne
     {
-        return $this->hasOne(Chauffeur::class, 'id', 'driver_id');
+        return $this->hasOne(User::class, 'id', 'driver_id');
     }
 }

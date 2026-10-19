@@ -2,12 +2,16 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Presence extends Model
 {
+    use BelongsToSchool;
+
     protected $fillable = [
+        'school_id',
         'student_id',
         'trip_id',
         'status',
@@ -23,19 +27,9 @@ class Presence extends Model
         ];
     }
 
-    public function eleve(): BelongsTo
-    {
-        return $this->belongsTo(Eleve::class, 'student_id');
-    }
-
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class, 'student_id');
-    }
-
-    public function trajet(): BelongsTo
-    {
-        return $this->belongsTo(Trajet::class, 'trip_id');
     }
 
     public function trip(): BelongsTo

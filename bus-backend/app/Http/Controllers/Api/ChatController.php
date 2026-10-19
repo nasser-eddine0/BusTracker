@@ -80,7 +80,7 @@ class ChatController extends Controller
         $topics = [
             [
                 'keywords' => ['bonjour', 'salut', 'hi', 'hello', 'hey', 'bonsoir', 'coucou'],
-                'reply' => "Bonjour ! Je suis l'assistant intelligent de **BusTracker**. 🚌✨\n\nComment puis-je vous aider aujourd'hui ? Je peux vous renseigner sur le fonctionnement en temps réel, l'interface parent/chauffeur, la base de données Supabase, ou la rédaction de votre rapport !"
+                'reply' => "Bonjour ! Je suis l'assistant intelligent de **BusTracker**. 🚌✨\n\nComment puis-je vous aider aujourd'hui ? Je peux vous renseigner sur le suivi en temps réel, les interfaces parent/chauffeur/admin, Firebase Realtime Database, ou l'architecture Laravel + React de l'application."
             ],
             [
                 'keywords' => ['chauffeur', 'conducteur', 'driver', 'chauffeurs', 'conducteurs', 'trip', 'trajet', 'trajets', 'demarrer'],
@@ -96,11 +96,11 @@ class ChatController extends Controller
             ],
             [
                 'keywords' => ['latence', 'lent', 'lenteur', 'lenteurs', 'vitesse', 'seconde', 'secondes', 'temps', 'clic', 'bouton', 'rapidite', 'rapide', 'optimise', 'optimisation', 'bulk'],
-                'reply' => "Nous avons entièrement optimisé le système pour éliminer les latences importantes (qui prenaient autrefois jusqu'à 8 secondes) :\n\n- ⚡ **Opérations groupées (Bulk)** : L'envoi massif de notifications aux parents a été déchargé dans des requêtes d'insertion groupées en arrière-plan.\n- 💾 **Supabase PostgreSQL** : Optimisation des requêtes de liaison complexes pour réduire le temps de réponse de la base de données à moins de 100ms.\n- 🚄 **Fluidité instantanée** : Chaque clic sur un bouton (ajouter/supprimer un bus, envoyer une alerte) répond désormais immédiatement !"
+                'reply' => "BusTracker optimise les flux critiques pour garder l'interface réactive :\n\n- ⚡ **Realtime Firebase** : Les positions et l'état du trajet actif sont diffusés sans rechargement.\n- 💾 **Laravel + Eloquent** : Les opérations métier restent côté API pour conserver les contrôles de rôle, d'école et de validation.\n- 🔔 **Notifications applicatives** : Les événements importants sont enregistrés en base et peuvent être relayés via le service WebSocket local."
             ],
             [
                 'keywords' => ['supabase', 'postgres', 'postgresql', 'base', 'donnees', 'aws', 'hebergement'],
-                'reply' => "BusTracker s'appuie sur une base de données **Supabase PostgreSQL** hautement performante :\n\n- ☁️ **Hébergement AWS** : La base de données tourne sur les serveurs AWS pour garantir une disponibilité maximale.\n- 🔒 **Sécurité et Relations** : Intégrité référentielle stricte pour associer les élèves, trajets, bus et chauffeurs sans risque d'incohérence.\n- 🚀 **Performances accrues** : Idéal pour gérer les requêtes complexes de notre application de transport scolaire en temps réel."
+                'reply' => "Dans ce projet, les données métier de BusTracker sont servies par un backend **Laravel** avec des modèles **Eloquent** et une base relationnelle configurée côté Laravel, MySQL en développement d'après la configuration du dépôt.\n\nFirebase Realtime Database est utilisé séparément pour les données live de trajet et de localisation."
             ],
             [
                 'keywords' => ['firebase', 'realtime', 'temps reel', 'instantane', 'live'],
@@ -108,11 +108,11 @@ class ChatController extends Controller
             ],
             [
                 'keywords' => ['rapport', 'documentation', 'projet', 'redaction', 'table', 'matieres', 'pdf', 'ecrire'],
-                'reply' => "Votre **rapport de projet** complet est en cours d'écriture dans le fichier **`rapport_bus_tracker.md`** !\n\nIl respecte exactement la structure attendue :\n- 📘 **Introduction Générale**\n- 💼 **Chapitre 1 : Contexte Général du Projet** (Présentation de l'organisme, problématique, solution proposée)\n- 📐 **Chapitre 2 : Analyse et Spécification des Besoins** (Acteurs, cas d'utilisation, besoins fonctionnels/non-fonctionnels)\n- 🏗️ **Chapitre 3 : Conception** (Architecture MVC/React, diagrammes de classes, dictionnaire de données, modèle relationnel Supabase)\n- 💻 **Chapitre 4 : Réalisation** (Environnement de développement, technologies, interfaces clés, et optimisations bulk)."
+                'reply' => "Je peux vous aider à expliquer ou structurer la documentation de BusTracker : contexte du transport scolaire, rôles utilisateur, architecture Laravel API + React/Vite, Firebase Realtime Database, règles de sécurité, et principaux flux métier comme le démarrage/finalisation des trajets."
             ],
             [
                 'keywords' => ['qui es tu', 'qui es-tu', 'ton nom', 'chatbot', 'assistant', 'intelligence', 'grok'],
-                'reply' => "Je suis l'assistant intelligent de **BusTracker** ! 🚌🤖\n\nJe suis programmé pour répondre à toutes vos questions sur l'architecture technique (Laravel, React, Tailwind, Supabase PostgreSQL, Firebase), les optimisations de performance de l'application, et vous aider à préparer votre présentation de projet."
+                'reply' => "Je suis l'assistant intelligent de **BusTracker** ! 🚌🤖\n\nJe peux répondre aux questions sur l'architecture technique Laravel, React/Vite, Tailwind, Firebase Realtime Database, les rôles utilisateur, et les flux de transport scolaire."
             ]
         ];
 
@@ -133,7 +133,7 @@ class ChatController extends Controller
         }
 
         // 4. Default intelligent response with structural choices
-        $defaultReply = "Je suis l'assistant virtuel **BusTracker** ! 🚌🤖\n\nJ'ai détecté que votre clé d'API xAI Console (Grok) n'a pas de crédits actifs pour le moment. Pour que votre démonstration reste 100% fonctionnelle, je réponds à vos questions en mode simulé.\n\n**Essayez de me poser des questions sur :**\n- 📍 **Le suivi en temps réel** (mots-clés: *carte*, *bus*, *GPS*, *Firebase*)\n- ⚡ **L'optimisation des performances** (mots-clés: *latence*, *lenteur*, *bulk*)\n- 👨‍✈️ **L'interface chauffeur et parents** (mots-clés: *chauffeur*, *parent*, *trajet*)\n- 💾 **La base de données** (mots-clés: *Supabase*, *PostgreSQL*)\n- 📘 **Le rapport de projet** (mot-clé: *rapport*)";
+        $defaultReply = "Je suis l'assistant virtuel **BusTracker** ! 🚌🤖\n\nL'assistant IA externe n'est pas disponible pour le moment, donc je réponds en mode simulé avec les informations du projet.\n\n**Essayez de me poser des questions sur :**\n- 📍 **Le suivi en temps réel** (mots-clés: *carte*, *bus*, *GPS*, *Firebase*)\n- ⚡ **Les performances et notifications** (mots-clés: *latence*, *lenteur*, *notifications*)\n- 👨‍✈️ **L'interface chauffeur et parents** (mots-clés: *chauffeur*, *parent*, *trajet*)\n- 💾 **La base de données Laravel/Eloquent** (mots-clés: *base*, *données*, *MySQL*)\n- 🧭 **L'architecture du projet** (mots-clés: *architecture*, *React*, *Laravel*)";
 
         return response()->json([
             'reply' => $defaultReply,

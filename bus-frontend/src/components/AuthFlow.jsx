@@ -55,10 +55,6 @@ function AuthFlow() {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    console.log("Login payload:", {
-      role: selectedRole,
-      ...form,
-    });
   };
 
   return (
