@@ -1,24 +1,32 @@
-import { spawn } from "node:child_process";
-import path from "node:path";
+import { createServer } from "vite";
 
-const viteBin = path.resolve("node_modules/vite/bin/vite.js");
-const child = spawn(process.execPath, [viteBin, "--configLoader", "runner", "--host", "127.0.0.1", "--port", "5176", "--strictPort"], {
-  stdio: "inherit",
-  windowsHide: true,
+const server = await createServer({
+  configFile: "vite.config.js",
+  configLoader: "runner",
+  server: {
+    host: "127.0.0.1",
+    port: 5176,
+    strictPort: true,
+  },
 });
+
+await server.listen();
 
 let stopping = false;
 
-function stop() {
+async function stop() {
   if (stopping) return;
   stopping = true;
-  if (process.platform === "win32" && child.pid) {
-    spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
-  } else {
-    child.kill("SIGTERM");
+
+  try {
+    await server.close();
+    process.exit(0);
+  } catch (error) {
+    console.error("Failed to close the Playwright Vite server:", error);
+    process.exit(1);
   }
 }
 
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
-child.once("exit", (code) => process.exit(stopping ? 0 : (code ?? 1)));
+process.once("SIGBREAK", stop);
