@@ -2,13 +2,14 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
-const { initializeApp } = require('firebase/app');
+const { deleteApp, initializeApp } = require('firebase/app');
 const { connectAuthEmulator, getAuth, signInWithCustomToken } = require('firebase/auth');
 const {
   connectDatabaseEmulator,
   get,
   getDatabase,
   goOnline,
+  goOffline,
   onValue,
   ref,
 } = require('firebase/database');
@@ -30,18 +31,71 @@ const newTripPath = `active_trips/${newSchoolId}/tripB`;
 const readPath = testRole === 'admin' ? `active_trips/${schoolId}` : tripPath;
 const databaseEmulatorUrl = `http://127.0.0.1:9000`;
 const ownerToken = process.env.FIREBASE_EMULATOR_TOKEN || 'owner';
+const firebaseApps = [];
+const firebaseDatabases = [];
+const listenerUnsubscribers = new Set();
+const timerHandles = new Set();
 
-const app = initializeApp({
+const cleanup = async () => {
+  const cleanupErrors = [];
+
+  for (const unsubscribe of listenerUnsubscribers) {
+    try {
+      unsubscribe();
+    } catch (error) {
+      cleanupErrors.push(String(error?.message || error));
+    }
+  }
+
+  for (const timer of timerHandles) {
+    clearTimeout(timer);
+  }
+
+  for (const database of firebaseDatabases) {
+    try {
+      goOffline(database);
+    } catch (error) {
+      cleanupErrors.push(String(error?.message || error));
+    }
+  }
+
+  for (const app of firebaseApps) {
+    try {
+      await deleteApp(app);
+    } catch (error) {
+      cleanupErrors.push(String(error?.message || error));
+    }
+  }
+
+  if (cleanupErrors.length > 0) {
+    throw new Error(`Firebase harness cleanup failed: ${cleanupErrors.join('; ')}`);
+  }
+};
+
+const firebaseConfig = {
   apiKey: 'fake',
   authDomain: 'demo-bustracker.firebaseapp.com',
   databaseURL: `https://${databaseNamespace}.firebaseio.com`,
   projectId: 'demo-bustracker',
-});
-const auth = getAuth(app);
-connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-const database = getDatabase(app);
-connectDatabaseEmulator(database, '127.0.0.1', 9000);
-goOnline(database);
+};
+
+const createFirebaseClient = (name) => {
+  const clientApp = initializeApp(firebaseConfig, name);
+  const clientAuth = getAuth(clientApp);
+  connectAuthEmulator(clientAuth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  const clientDatabase = getDatabase(clientApp);
+  connectDatabaseEmulator(clientDatabase, '127.0.0.1', 9000);
+  goOnline(clientDatabase);
+  firebaseApps.push(clientApp);
+  firebaseDatabases.push(clientDatabase);
+  return { auth: clientAuth, database: clientDatabase };
+};
+
+if (databaseNamespace !== 'demo-bustracker-default-rtdb') {
+  throw new Error(`Unexpected Firebase namespace: ${databaseNamespace}`);
+}
+
+const { auth, database } = createFirebaseClient('phase19k-primary');
 
 const json = async (response) => {
   const body = await response.json();
@@ -73,6 +127,8 @@ const setupTrip = {
 };
 const setupNewTrip = { trip_id: 'tripB', bus_id: 'busB', status: 'in_progress' };
 
+const run = async () => {
+try {
 await emulatorRequest(`active_trips/${schoolId}/${tripId}`, {
   method: 'PUT',
   body: JSON.stringify(setupTrip),
@@ -81,6 +137,10 @@ if (transferMode) {
   await emulatorRequest(newTripPath, { method: 'PUT', body: JSON.stringify(setupNewTrip) });
 }
 const writtenTrip = await emulatorRequest(`active_trips/${schoolId}/${tripId}`);
+await emulatorRequest(`active_trips/${newSchoolId}/unauthorizedTrip`, {
+  method: 'PUT',
+  body: JSON.stringify({ trip_id: 'unauthorizedTrip', bus_id: 'busOther', status: 'in_progress' }),
+});
 
 const login = await json(await fetch(`${baseUrl}/api/login`, {
   method: 'POST',
@@ -129,7 +189,18 @@ if (failedSetupChecks.length > 0) {
   throw new Error(`Synthetic emulator setup mismatch in: ${failedSetupChecks.join(', ')}`);
 }
 const trip = ref(database, readPath);
-const newTrip = transferMode ? ref(database, `active_trips/${newSchoolId}`) : null;
+const unauthorizedTrip = ref(database, `active_trips/${newSchoolId}/unauthorizedTrip`);
+const newTrip = transferMode ? ref(database, newTripPath) : null;
+const expectPermissionDenied = async (databaseRef, label) => {
+  try {
+    await get(databaseRef);
+    throw new Error(`${label} unexpectedly succeeded.`);
+  } catch (error) {
+    const diagnostic = String(error?.message || error).toLowerCase();
+    if (!diagnostic.includes('permission')) throw error;
+    console.log(`${label}: PASS (permission_denied)`);
+  }
+};
 console.log(JSON.stringify({
   uid,
   databaseNamespace,
@@ -143,21 +214,32 @@ console.log(JSON.stringify({
 
 await get(trip);
 console.log('pre-deactivation read: PASS');
+await expectPermissionDenied(unauthorizedTrip, 'pre-deactivation cross-school read');
 if (transferMode) {
-  await get(newTrip).then(() => { throw new Error('Pre-transfer new-school read unexpectedly succeeded.'); })
-    .catch((error) => { if (!String(error?.message).toLowerCase().includes('permission')) throw error; console.log('pre-transfer new-school read: PASS (permission_denied)'); });
+  await expectPermissionDenied(newTrip, 'pre-transfer new-school read');
 }
 
 let listenerResult = 'NOT VERIFIED';
 let listenerError;
+let listenerLastEvent = 'none';
+let listenerEvents = 0;
 const listenerDone = new Promise((resolve) => {
-  const timeout = setTimeout(resolve, 5000);
-  onValue(trip, () => {}, (error) => {
+  const timeout = setTimeout(() => {
+    timerHandles.delete(timeout);
+    resolve();
+  }, 5000);
+  timerHandles.add(timeout);
+  const unsubscribe = onValue(trip, () => {
+    listenerEvents += 1;
+    listenerLastEvent = 'data';
+  }, (error) => {
+    timerHandles.delete(timeout);
+    clearTimeout(timeout);
     listenerError = error.code;
     listenerResult = error.code === 'PERMISSION_DENIED' ? 'PASS' : `FAIL (${error.code})`;
-    clearTimeout(timeout);
     resolve();
   });
+  listenerUnsubscribers.add(unsubscribe);
 });
 
 let actionResponse;
@@ -190,15 +272,18 @@ if (suspensionMode || deletedAdminMode || transferAction) {
     : deletedAdminMode
     ? `${baseUrl}/api/super-admin/admins/${uid}`
     : `${baseUrl}/api/super-admin/schools/${schoolId}/toggle-status`;
+  const actionMethod = transferAction ? 'PUT' : deletedAdminMode ? 'DELETE' : 'PATCH';
+  const actionPayload = transferAction
+    ? { name: 'Synthetic School Admin', email, phone: null, school_id: Number(newSchoolId), role: 'admin', status: 'active' }
+    : deletedAdminMode ? undefined : { is_active: false };
+  console.log(JSON.stringify({ actionOrigin: 'Laravel HTTP', actionMethod, endpoint, payload: actionPayload || null }));
   actionResponse = await json(await fetch(endpoint, {
-    method: transferAction ? 'PUT' : deletedAdminMode ? 'DELETE' : 'PATCH',
+    method: actionMethod,
     headers: {
       authorization: `Bearer ${superAdminLogin.access_token}`,
       'content-type': 'application/json',
     },
-    ...(transferAction
-      ? { body: JSON.stringify({ name: 'Synthetic School Admin', email, phone: null, school_id: Number(newSchoolId), role: 'admin', status: 'active' }) }
-      : deletedAdminMode ? {} : { body: JSON.stringify({ is_active: false }) }),
+    ...(actionPayload ? { body: JSON.stringify(actionPayload) } : {}),
   }));
   console.log(`Laravel ${transferAction ? 'school transfer' : deletedAdminMode ? 'admin deletion' : 'school suspension'}: ${JSON.stringify(actionResponse)}`);
 } else if (parentDeactivationMode) {
@@ -247,8 +332,37 @@ const freshRead = await get(trip)
 
 await listenerDone;
 console.log(`fresh server-backed read: ${freshRead}`);
-console.log(`listener revocation: ${listenerResult}${listenerError ? ` (${listenerError})` : ''}`);
+console.log(`original listener: ${listenerResult}${listenerError ? ` (${listenerError})` : ''}; events=${listenerEvents}; last=${listenerLastEvent}; observedMs=5000`);
+if (suspensionMode || deletedAdminMode || transferAction || parentDeactivationMode) {
+  const secondary = createFirebaseClient('phase19k-secondary');
+  await signInWithCustomToken(secondary.auth, tokenResponse.firebaseToken);
+  const secondaryTrip = ref(secondary.database, readPath);
+  await expectPermissionDenied(secondaryTrip, 'new Firebase client with original token');
+  const secondaryListener = new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      timerHandles.delete(timeout);
+      resolve('NOT VERIFIED (no callback in 5000ms)');
+    }, 5000);
+    timerHandles.add(timeout);
+    const unsubscribe = onValue(secondaryTrip, () => {}, (error) => {
+      timerHandles.delete(timeout);
+      clearTimeout(timeout);
+      resolve(error.code === 'PERMISSION_DENIED' ? 'PASS (PERMISSION_DENIED)' : `FAIL (${error.code || 'unknown'})`);
+    });
+    listenerUnsubscribers.add(unsubscribe);
+  });
+  console.log(`new listener after action: ${await secondaryListener}`);
+}
 if (transferMode) {
   const newRead = await get(newTrip).then(() => 'PASS').catch((error) => `FAIL (${error?.message || 'unknown'})`);
   console.log(`new-school post-transfer read: ${newRead}`);
 }
+} finally {
+  await cleanup();
+}
+};
+
+run().catch((error) => {
+  console.error(error?.stack || error);
+  process.exitCode = 1;
+});

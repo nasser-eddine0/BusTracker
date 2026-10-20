@@ -11,6 +11,7 @@ use App\Services\FirebaseMembershipSynchronizer;
 use App\Services\FirebaseService;
 use App\Services\EmulatorMembershipProjectionWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Mockery;
 use Tests\TestCase;
@@ -65,6 +66,44 @@ class FirebaseMembershipSyncTest extends TestCase
         ]);
         $this->expectException(\RuntimeException::class);
         new EmulatorMembershipProjectionWriter;
+    }
+
+    public function test_emulator_writer_reports_safe_testing_readback_diagnostic(): void
+    {
+        config([
+            'services.firebase.database_url' => 'http://127.0.0.1:9000',
+            'services.firebase.database_emulator_host' => '127.0.0.1:9000',
+            'services.firebase.emulator_token' => 'owner',
+            'services.firebase.project_id' => 'demo-bustracker',
+        ]);
+        Http::fake([
+            'http://127.0.0.1:9000/*' => Http::sequence()
+                ->push(null, 200)
+                ->push([
+                    'active' => false,
+                    'role' => 'parent',
+                    'allowedBusIds' => ['busA' => true],
+                ], 200),
+        ]);
+
+        $writer = new EmulatorMembershipProjectionWriter;
+        $writer->deactivate(1, 7, [
+            'active' => false,
+            'role' => 'parent',
+            'allowedBusIds' => (object) [],
+        ]);
+
+        $diagnostic = $writer->lastDiagnostic();
+
+        $this->assertSame('demo-bustracker', $diagnostic['project_id']);
+        $this->assertSame('demo-bustracker-default-rtdb', $diagnostic['namespace']);
+        $this->assertSame('school_users/1/7', $diagnostic['membership_path']);
+        $this->assertFalse($diagnostic['desired_active']);
+        $this->assertFalse($diagnostic['read_back_active']);
+        $this->assertSame(['busA'], $diagnostic['read_back_allowed_bus_keys']);
+        $this->assertArrayNotHasKey('token', $diagnostic);
+        $this->assertArrayNotHasKey('authorization', $diagnostic);
+        Http::assertSentCount(2);
     }
 
     public function test_sql_membership_state_is_pending_until_firebase_sync_succeeds(): void

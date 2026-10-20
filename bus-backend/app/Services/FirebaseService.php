@@ -230,6 +230,13 @@ class FirebaseService
         $this->runWithRetry(fn () => $this->membershipWriter()->deactivate($schoolId, $userId, $payload));
     }
 
+    public function membershipProjectionDiagnostic(): ?array
+    {
+        return $this->membershipWriter instanceof EmulatorMembershipProjectionWriter
+            ? $this->membershipWriter->lastDiagnostic()
+            : null;
+    }
+
     private function membershipWriter(): MembershipProjectionWriter
     {
         return $this->membershipWriter ??= new KreaitMembershipProjectionWriter($this->database);

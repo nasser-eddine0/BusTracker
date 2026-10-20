@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\FirebaseService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Log;
 
 class RetryFirebaseProjection implements ShouldQueue
 {
@@ -50,6 +51,8 @@ class RetryFirebaseProjection implements ShouldQueue
                 'next_retry_at' => null,
                 'last_error' => null,
             ]);
+
+            $this->logTestingDiagnostic($failure, $firebase, 'synced', null);
         } catch (\Throwable $exception) {
             $failure->update([
                 'status' => 'failed',
@@ -57,12 +60,39 @@ class RetryFirebaseProjection implements ShouldQueue
                 'next_retry_at' => now()->addSeconds($this->retryDelay($failure->attempts)),
             ]);
 
+            $this->logTestingDiagnostic($failure, $firebase ?? null, 'failed', $exception->getMessage());
+
             if (config('queue.default') === 'sync') {
                 return;
             }
 
             throw $exception;
         }
+    }
+
+    private function logTestingDiagnostic(FirebaseSyncFailure $failure, mixed $firebase, string $status, ?string $lastError): void
+    {
+        if (! app()->environment('testing') || ! is_object($firebase) || get_class($firebase) !== FirebaseService::class) {
+            return;
+        }
+
+        $diagnostic = $firebase->membershipProjectionDiagnostic();
+        if ($diagnostic === null) {
+            return;
+        }
+
+        $safeError = $lastError === null ? null : preg_replace(
+            '/(authorization|token|password|private[_ ]key|secret)\s*[:=]\s*[^\s,;]+/i',
+            '$1=[redacted]',
+            substr($lastError, 0, 500),
+        );
+
+        Log::info('Firebase membership projection diagnostic', array_merge($diagnostic, [
+            'sync_id' => (int) $failure->id,
+            'sync_status' => $status,
+            'sync_attempts' => (int) $failure->attempts,
+            'sync_last_error' => $safeError,
+        ]));
     }
 
     private function retryOperation(FirebaseSyncFailure $failure, FirebaseService $firebase): void

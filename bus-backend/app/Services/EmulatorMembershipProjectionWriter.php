@@ -10,6 +10,12 @@ final class EmulatorMembershipProjectionWriter implements MembershipProjectionWr
 {
     private string $baseUrl;
 
+    private string $databaseHost;
+
+    private string $project;
+
+    private ?array $lastDiagnostic = null;
+
     public function __construct()
     {
         if (! in_array(app()->environment(), ['testing', 'local'], true)) {
@@ -31,6 +37,8 @@ final class EmulatorMembershipProjectionWriter implements MembershipProjectionWr
         $project = (string) config('services.firebase.project_id', 'demo-bustracker');
         $namespace = rawurlencode($project.'-default-rtdb');
         $this->baseUrl = 'http://'.$host.'/';
+        $this->databaseHost = $host;
+        $this->project = $project;
         $this->namespace = $namespace;
     }
 
@@ -38,7 +46,13 @@ final class EmulatorMembershipProjectionWriter implements MembershipProjectionWr
 
     public function set(int $schoolId, int $userId, array $payload): void
     {
-        $this->request("school_users/{$schoolId}/{$userId}", $payload);
+        $path = "school_users/{$schoolId}/{$userId}";
+        $this->request($path, $payload);
+
+        if (app()->environment('testing')) {
+            $readBack = $this->request($path, null, 'GET');
+            $this->lastDiagnostic = $this->diagnostic($path, $payload, is_array($readBack) ? $readBack : []);
+        }
     }
 
     public function deactivate(int $schoolId, int $userId, array $payload): void
@@ -51,10 +65,39 @@ final class EmulatorMembershipProjectionWriter implements MembershipProjectionWr
         $this->request("school_users/{$schoolId}", null);
     }
 
-    private function request(string $path, ?array $payload): void
+    public function lastDiagnostic(): ?array
     {
-        $response = Http::withToken((string) config('services.firebase.emulator_token'))
-            ->put($this->baseUrl.$path.'.json?ns='.$this->namespace, $payload);
+        return $this->lastDiagnostic;
+    }
+
+    private function request(string $path, ?array $payload, string $method = 'PUT'): mixed
+    {
+        $request = Http::withToken((string) config('services.firebase.emulator_token'));
+        $url = $this->baseUrl.$path.'.json?ns='.$this->namespace;
+        $response = $method === 'GET'
+            ? $request->get($url)
+            : $request->put($url, $payload);
         $response->throw();
+
+        return $response->json();
+    }
+
+    private function diagnostic(string $path, array $payload, array $readBack): array
+    {
+        return [
+            'writer' => 'emulator-rest',
+            'project_id' => $this->project,
+            'database_host' => $this->databaseHost,
+            'namespace' => rawurldecode($this->namespace),
+            'membership_path' => $path,
+            'desired_active' => $payload['active'] ?? null,
+            'desired_role' => $payload['role'] ?? null,
+            'desired_allowed_bus_keys' => array_map('strval', array_keys((array) ($payload['allowedBusIds'] ?? []))),
+            'read_back_active' => $readBack['active'] ?? null,
+            'read_back_role' => $readBack['role'] ?? null,
+            'read_back_allowed_bus_keys' => array_map('strval', array_keys((array) ($readBack['allowedBusIds'] ?? []))),
+            'operation_id' => 'membership-'.bin2hex(random_bytes(8)),
+            'observed_at' => now()->toISOString(),
+        ];
     }
 }
