@@ -1,0 +1,71 @@
+name: Docker Build Verification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-docker:
+    name: Build & Verify Backend Container
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t bustracker-backend-candidate:test bus-backend
+
+      - name: Verify platform requirements inside final image
+        run: |
+          docker run --rm --entrypoint composer bustracker-backend-candidate:test check-platform-reqs --no-dev
+
+      - name: Start container with synthetic configuration on non-default port
+        run: |
+          docker run -d \
+            --name test-backend \
+            -p 8088:8088 \
+            -e PORT=8088 \
+            -e APP_ENV=production \
+            -e APP_KEY=base64:sS6/1vI1Y5qZk0uR9oP7aT3wX2yC4eG6hI8jK0lM2nA= \
+            -e APP_DEBUG=false \
+            -e LOG_CHANNEL=stderr \
+            bustracker-backend-candidate:test
+
+      - name: Verify /up health check endpoint responds with HTTP 200
+        run: |
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8088/up || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check /up succeeded with HTTP 200 on non-default port 8088."
+              exit 0
+            fi
+            echo "Waiting for container to become healthy... (attempt $i/30, status: $STATUS)"
+            sleep 1
+          done
+          echo "ERROR: Health check /up failed or timed out!"
+          docker logs test-backend
+          exit 1
+
+      - name: Verify processes running and test graceful termination
+        run: |
+          echo "Verifying running processes in container..."
+          docker exec test-backend pgrep -f php-fpm > /dev/null || { echo "ERROR: PHP-FPM process is not running!"; exit 1; }
+          docker exec test-backend pgrep -f nginx > /dev/null || { echo "ERROR: Nginx process is not running!"; exit 1; }
+          echo "Both PHP-FPM and Nginx verified active."
+
+          echo "Sending SIGTERM via docker stop..."
+          docker stop --time 10 test-backend
+
+          EXIT_CODE=$(docker inspect test-backend --format='{{.State.ExitCode}}')
+          echo "Container exited with status $EXIT_CODE"
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "ERROR: Expected clean exit code 0, got $EXIT_CODE"
+            docker logs test-backend
+            exit 1
+          fi
+
+      - name: Clean up test container
+        if: always()
+        run: |
+          docker rm -f test-backend 2>/dev/null || true
