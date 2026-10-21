@@ -1,8 +1,9 @@
 # Stage 1: Base image with PHP 8.2 and all required extensions compiled
-FROM php:8.2-fpm-alpine AS base
+FROM php:8.2-fpm-alpine3.24 AS base
 
 # Install Nginx, runtime C-libraries, and build dependencies for required PHP extensions
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache \
         nginx \
         libpq \
         libzip \
