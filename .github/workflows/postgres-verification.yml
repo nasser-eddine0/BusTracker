@@ -1,0 +1,94 @@
+name: PostgreSQL Verification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-postgres:
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: bus_tracker_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd="pg_isready -U postgres -d bus_tracker_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pgsql, pdo_pgsql
+          coverage: none
+
+      - name: Install PHP dependencies
+        working-directory: bus-backend
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Prepare Laravel test environment
+        working-directory: bus-backend
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run full Laravel suite on PostgreSQL
+        working-directory: bus-backend
+        env:
+          APP_ENV: testing
+          APP_DEBUG: 'false'
+          DB_CONNECTION: pgsql
+          DB_HOST: postgres
+          DB_PORT: 5432
+          DB_DATABASE: bus_tracker_ci
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: |
+          cat > "$RUNNER_TEMP/phpunit-postgres.xml" <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+                   bootstrap="tests/bootstrap-postgres.php"
+                   colors="true">
+              <testsuites>
+                  <testsuite name="Unit">
+                      <directory>tests/Unit</directory>
+                  </testsuite>
+                  <testsuite name="Feature">
+                      <directory>tests/Feature</directory>
+                  </testsuite>
+              </testsuites>
+              <source>
+                  <include>
+                      <directory>app</directory>
+                  </include>
+              </source>
+              <php>
+                  <env name="APP_ENV" value="testing" force="true"/>
+                  <env name="APP_DEBUG" value="false" force="true"/>
+                  <env name="DB_CONNECTION" value="pgsql" force="true"/>
+                  <env name="DB_HOST" value="postgres" force="true"/>
+                  <env name="DB_PORT" value="5432" force="true"/>
+                  <env name="DB_DATABASE" value="bus_tracker_ci" force="true"/>
+                  <env name="DB_USERNAME" value="postgres" force="true"/>
+                  <env name="DB_PASSWORD" value="postgres" force="true"/>
+                  <env name="DB_URL" value="" force="true"/>
+                  <env name="BROADCAST_CONNECTION" value="null" force="true"/>
+                  <env name="CACHE_STORE" value="array" force="true"/>
+                  <env name="MAIL_MAILER" value="array" force="true"/>
+                  <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+                  <env name="SESSION_DRIVER" value="array" force="true"/>
+              </php>
+          </phpunit>
+          XML
+          vendor/bin/phpunit --configuration "$RUNNER_TEMP/phpunit-postgres.xml" --do-not-cache-result
