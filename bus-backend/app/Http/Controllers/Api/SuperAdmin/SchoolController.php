@@ -36,8 +36,10 @@ class SchoolController extends Controller
 
     public function store(Request $request, AuditLogger $auditLogger): JsonResponse
     {
-        return DB::transaction(function () use ($request, $auditLogger) {
-            $school = School::create($this->validatedData($request));
+        $validated = $this->validatedData($request);
+
+        return DB::transaction(function () use ($validated, $auditLogger) {
+            $school = School::create($validated);
 
             $auditLogger->log([
                 'action' => 'school_created',
@@ -441,6 +443,11 @@ class SchoolController extends Controller
 
     private function validatedData(Request $request, ?School $school = null): array
     {
+        $uniqueRule = Rule::unique('schools', 'subdomain');
+        if ($school !== null) {
+            $uniqueRule->ignore($school);
+        }
+
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'subdomain' => [
@@ -448,7 +455,7 @@ class SchoolController extends Controller
                 'string',
                 'max:80',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique('schools', 'subdomain')->ignore($school),
+                $uniqueRule,
             ],
             'logo_path' => ['nullable', 'string', 'max:255'],
             'primary_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
