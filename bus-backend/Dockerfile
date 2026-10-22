@@ -70,6 +70,8 @@ COPY docker/php.ini /usr/local/etc/php/conf.d/app.ini
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && addgroup -g 1000 render \
+    && addgroup www-data render \
     && mkdir -p /var/www/html/storage/framework/cache/data \
                 /var/www/html/storage/framework/sessions \
                 /var/www/html/storage/framework/views \
