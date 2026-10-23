@@ -53,6 +53,7 @@ jobs:
           DB_DATABASE: bus_tracker_ci
           DB_USERNAME: postgres
           DB_PASSWORD: postgres
+          POSTGRES_VERIFICATION_GUARD: '1'
         run: |
           PHPUNIT_CONFIG="$(mktemp "$PWD/phpunit-postgres.XXXXXX.xml")"
           trap 'rm -f "$PHPUNIT_CONFIG"' EXIT
@@ -92,8 +93,6 @@ jobs:
               </php>
           </phpunit>
           XML
-          php \
-            -d auto_prepend_file="$PWD/tests/bootstrap-postgres.php" \
-            vendor/bin/phpunit \
+          vendor/bin/phpunit \
             --configuration "$PHPUNIT_CONFIG" \
             --do-not-cache-result

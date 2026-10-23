@@ -396,6 +396,9 @@ class WhatsAppAccountLinkingTest extends TestCase
             $service->issueLinkToken($parent)['token'],
             $this->identity('retained-bsuid', '0612345678'),
         );
+        $account = WhatsAppAccount::query()->where('user_id', $parent->id)->firstOrFail();
+        $bsuidHash = $account->bsuid_hash;
+        $phoneHash = $account->destination_e164_hash;
 
         $this->assertForeignKeyDeleteRejected(
             fn () => $parent->forceDelete(),
@@ -408,8 +411,13 @@ class WhatsAppAccountLinkingTest extends TestCase
 
         $this->assertDatabaseHas('users', ['id' => $parent->id]);
         $this->assertDatabaseHas('schools', ['id' => $school->id]);
-        $this->assertDatabaseHas('whatsapp_accounts', ['user_id' => $parent->id]);
+        $this->assertDatabaseHas('whatsapp_accounts', [
+            'user_id' => $parent->id,
+            'bsuid_hash' => $bsuidHash,
+            'destination_e164_hash' => $phoneHash,
+        ]);
         $this->assertDatabaseHas('whatsapp_link_tokens', ['user_id' => $parent->id]);
+        $this->assertSame(1, DB::table('users')->where('id', $parent->id)->count());
     }
 
     public function test_token_expiring_at_the_claim_boundary_is_rejected(): void
@@ -512,7 +520,7 @@ class WhatsAppAccountLinkingTest extends TestCase
             $this->fail($failureMessage);
         } catch (QueryException $exception) {
             if (DB::getDriverName() === 'pgsql') {
-                $this->assertSame('23503', $exception->errorInfo[0] ?? (string) $exception->getCode());
+                $this->assertSame('23001', $exception->errorInfo[0] ?? (string) $exception->getCode());
             }
         }
     }
