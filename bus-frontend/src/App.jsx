@@ -8,6 +8,7 @@ import Admin from "./pages/Admin";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import SignIn from "./pages/SignIn";
 import RoleSelect from "./pages/RoleSelect";
+import Welcome from "./pages/Welcome";
 import ChatAssistant from "./pages/ChatAssistant";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -59,7 +60,14 @@ function AnimatedRoutes() {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={routeGroupKey}>
-        <Route path="/" element={<Navigate to="/choose-role" replace />} />
+        <Route
+          path="/"
+          element={
+            <PageTransition>
+              <Welcome />
+            </PageTransition>
+          }
+        />
         <Route
           path="/choose-role"
           element={
