@@ -54,7 +54,9 @@ jobs:
           DB_USERNAME: postgres
           DB_PASSWORD: postgres
         run: |
-          cat > "$RUNNER_TEMP/phpunit-postgres.xml" <<'XML'
+          PHPUNIT_CONFIG="$(mktemp "$PWD/phpunit-postgres.XXXXXX.xml")"
+          trap 'rm -f "$PHPUNIT_CONFIG"' EXIT
+          cat > "$PHPUNIT_CONFIG" <<'XML'
           <?xml version="1.0" encoding="UTF-8"?>
           <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
@@ -91,4 +93,4 @@ jobs:
               </php>
           </phpunit>
           XML
-          vendor/bin/phpunit --configuration "$RUNNER_TEMP/phpunit-postgres.xml" --do-not-cache-result
+          vendor/bin/phpunit --configuration "$PHPUNIT_CONFIG" --do-not-cache-result
