@@ -397,20 +397,17 @@ class WhatsAppAccountLinkingTest extends TestCase
             $this->identity('retained-bsuid', '0612345678'),
         );
 
-        try {
-            $parent->forceDelete();
-            $this->fail('Hard deletion unexpectedly removed a linked parent.');
-        } catch (QueryException) {
-            $this->assertDatabaseHas('users', ['id' => $parent->id]);
-        }
+        $this->assertForeignKeyDeleteRejected(
+            fn () => $parent->forceDelete(),
+            'Hard deletion unexpectedly removed a linked parent.',
+        );
+        $this->assertForeignKeyDeleteRejected(
+            fn () => $school->delete(),
+            'Hard deletion unexpectedly removed a linked school.',
+        );
 
-        try {
-            $school->delete();
-            $this->fail('Hard deletion unexpectedly removed a linked school.');
-        } catch (QueryException) {
-            $this->assertDatabaseHas('schools', ['id' => $school->id]);
-        }
-
+        $this->assertDatabaseHas('users', ['id' => $parent->id]);
+        $this->assertDatabaseHas('schools', ['id' => $school->id]);
         $this->assertDatabaseHas('whatsapp_accounts', ['user_id' => $parent->id]);
         $this->assertDatabaseHas('whatsapp_link_tokens', ['user_id' => $parent->id]);
     }
@@ -503,6 +500,20 @@ class WhatsAppAccountLinkingTest extends TestCase
             $this->fail('Expected the domain operation to fail.');
         } catch (DomainException $exception) {
             $this->assertNotSame('', $exception->getMessage());
+        }
+    }
+
+    private function assertForeignKeyDeleteRejected(callable $delete, string $failureMessage): void
+    {
+        try {
+            DB::transaction(function () use ($delete): void {
+                $delete();
+            });
+            $this->fail($failureMessage);
+        } catch (QueryException $exception) {
+            if (DB::getDriverName() === 'pgsql') {
+                $this->assertSame('23503', $exception->errorInfo[0] ?? (string) $exception->getCode());
+            }
         }
     }
 }

@@ -60,7 +60,6 @@ jobs:
           <?xml version="1.0" encoding="UTF-8"?>
           <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
-                   bootstrap="tests/bootstrap-postgres.php"
                    colors="true">
               <testsuites>
                   <testsuite name="Unit">
@@ -93,4 +92,8 @@ jobs:
               </php>
           </phpunit>
           XML
-          vendor/bin/phpunit --configuration "$PHPUNIT_CONFIG" --do-not-cache-result
+          php \
+            -d auto_prepend_file="$PWD/tests/bootstrap-postgres.php" \
+            vendor/bin/phpunit \
+            --configuration "$PHPUNIT_CONFIG" \
+            --do-not-cache-result
